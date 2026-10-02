@@ -1,0 +1,270 @@
+{
+  "name": "Tactical Cinematic",
+  "rate": 48000,
+  "clips": [
+    {
+      "id": "t_impact",
+      "label": "Impact",
+      "category": "Cinematic",
+      "file": "t_impact.wav",
+      "seconds": 3.6,
+      "peak": 0.2055,
+      "rms_db": -23.4,
+      "usage": "Big moment, reveal, landing a clutch.",
+      "license": "CC0-1.0 (synthesized by tactical_pack.py)"
+    },
+    {
+      "id": "t_subdrop",
+      "label": "Sub Drop",
+      "category": "Cinematic",
+      "file": "t_subdrop.wav",
+      "seconds": 2.8,
+      "peak": 0.1764,
+      "rms_db": -22.9,
+      "usage": "Under a dramatic line.",
+      "license": "CC0-1.0 (synthesized by tactical_pack.py)"
+    },
+    {
+      "id": "t_horn",
+      "label": "Horn Hit",
+      "category": "Cinematic",
+      "file": "t_horn.wav",
+      "seconds": 4.4,
+      "peak": 0.215,
+      "rms_db": -23.0,
+      "usage": "Trailer-style 'BRAAAM'.",
+      "license": "CC0-1.0 (synthesized by tactical_pack.py)"
+    },
+    {
+      "id": "t_swell",
+      "label": "Reverse Swell",
+      "category": "Cinematic",
+      "file": "t_swell.wav",
+      "seconds": 5.18,
+      "peak": 0.23,
+      "rms_db": -24.5,
+      "usage": "Build-up into a hit.",
+      "license": "CC0-1.0 (synthesized by tactical_pack.py)"
+    },
+    {
+      "id": "t_slowmo",
+      "label": "Slow-Mo",
+      "category": "Cinematic",
+      "file": "t_slowmo.wav",
+      "seconds": 4.4,
+      "peak": 0.1777,
+      "rms_db": -22.0,
+      "usage": "Replay / 'wait for it' moment.",
+      "license": "CC0-1.0 (synthesized by tactical_pack.py)"
+    },
+    {
+      "id": "t_comms_open",
+      "label": "Comms Open",
+      "category": "Comms",
+      "file": "t_comms_open.wav",
+      "seconds": 0.591,
+      "peak": 0.1969,
+      "rms_db": -22.8,
+      "usage": "Before a callout.",
+      "license": "CC0-1.0 (synthesized by tactical_pack.py)"
+    },
+    {
+      "id": "t_comms_close",
+      "label": "Comms Over",
+      "category": "Comms",
+      "file": "t_comms_close.wav",
+      "seconds": 0.648,
+      "peak": 0.23,
+      "rms_db": -23.4,
+      "usage": "After a callout.",
+      "license": "CC0-1.0 (synthesized by tactical_pack.py)"
+    },
+    {
+      "id": "t_static",
+      "label": "Interference",
+      "category": "Comms",
+      "file": "t_static.wav",
+      "seconds": 1.8,
+      "peak": 0.1931,
+      "rms_db": -22.2,
+      "usage": "Jammed / lost signal joke.",
+      "license": "CC0-1.0 (synthesized by tactical_pack.py)"
+    },
+    {
+      "id": "t_sonar",
+      "label": "Sonar Ping",
+      "category": "Recon",
+      "file": "t_sonar.wav",
+      "seconds": 4.7,
+      "peak": 0.1793,
+      "rms_db": -22.6,
+      "usage": "Spotted / searching.",
+      "license": "CC0-1.0 (synthesized by tactical_pack.py)"
+    },
+    {
+      "id": "t_lock",
+      "label": "Target Lock",
+      "category": "Recon",
+      "file": "t_lock.wav",
+      "seconds": 2.2,
+      "peak": 0.1769,
+      "rms_db": -22.7,
+      "usage": "Locking on, about to push.",
+      "license": "CC0-1.0 (synthesized by tactical_pack.py)"
+    },
+    {
+      "id": "t_incoming",
+      "label": "Incoming",
+      "category": "Recon",
+      "file": "t_incoming.wav",
+      "seconds": 3.4,
+      "peak": 0.23,
+      "rms_db": -24.0,
+      "usage": "Danger close / enemy push.",
+      "license": "CC0-1.0 (synthesized by tactical_pack.py)"
+    },
+    {
+      "id": "t_flyby",
+      "label": "Jet Flyby",
+      "category": "Ordnance",
+      "file": "t_flyby.wav",
+      "seconds": 4.4,
+      "peak": 0.23,
+      "rms_db": -25.1,
+      "usage": "Air support inbound.",
+      "license": "CC0-1.0 (synthesized by tactical_pack.py)"
+    },
+    {
+      "id": "t_explosion",
+      "label": "Explosion",
+      "category": "Ordnance",
+      "file": "t_explosion.wav",
+      "seconds": 4.4,
+      "peak": 0.2152,
+      "rms_db": -22.3,
+      "usage": "Grenade / vehicle down.",
+      "license": "CC0-1.0 (synthesized by tactical_pack.py)"
+    },
+    {
+      "id": "t_airstrike",
+      "label": "Airstrike",
+      "category": "Ordnance",
+      "file": "t_airstrike.wav",
+      "seconds": 8.55,
+      "peak": 0.23,
+      "rms_db": -23.3,
+      "usage": "Full call-in: alarm, flyby, triple blast.",
+      "license": "CC0-1.0 (synthesized by tactical_pack.py)"
+    },
+    {
+      "id": "t_heartbeat",
+      "label": "Heartbeat",
+      "category": "Tension",
+      "file": "t_heartbeat.wav",
+      "seconds": 3.551,
+      "peak": 0.23,
+      "rms_db": -25.9,
+      "usage": "Clutch / last alive.",
+      "license": "CC0-1.0 (synthesized by tactical_pack.py)"
+    },
+    {
+      "id": "t_secured",
+      "label": "Objective Secured",
+      "category": "Stingers",
+      "file": "t_secured.wav",
+      "seconds": 4.0,
+      "peak": 0.2067,
+      "rms_db": -22.9,
+      "usage": "Win / point captured.",
+      "license": "CC0-1.0 (synthesized by tactical_pack.py)"
+    },
+    {
+      "id": "t_lost",
+      "label": "Objective Lost",
+      "category": "Stingers",
+      "file": "t_lost.wav",
+      "seconds": 3.85,
+      "peak": 0.2239,
+      "rms_db": -22.7,
+      "usage": "Lost the point / round.",
+      "license": "CC0-1.0 (synthesized by tactical_pack.py)"
+    },
+    {
+      "id": "t_lockload",
+      "label": "Lock & Load",
+      "category": "Stingers",
+      "file": "t_lockload.wav",
+      "seconds": 1.7,
+      "peak": 0.2139,
+      "rms_db": -23.0,
+      "usage": "Match start / going in.",
+      "license": "CC0-1.0 (synthesized by tactical_pack.py)"
+    },
+    {
+      "id": "t_glitch",
+      "label": "Glitch Hit",
+      "category": "Stingers",
+      "file": "t_glitch.wav",
+      "seconds": 1.133,
+      "peak": 0.23,
+      "rms_db": -23.3,
+      "usage": "Something broke / desync.",
+      "license": "CC0-1.0 (synthesized by tactical_pack.py)"
+    },
+    {
+      "id": "t_countdown",
+      "label": "Countdown",
+      "category": "Stingers",
+      "file": "t_countdown.wav",
+      "seconds": 6.8,
+      "peak": 0.2142,
+      "rms_db": -25.6,
+      "usage": "3-2-1 then hit.",
+      "license": "CC0-1.0 (synthesized by tactical_pack.py)"
+    },
+    {
+      "id": "t_reveal",
+      "label": "Reveal",
+      "category": "Stingers",
+      "file": "t_reveal.wav",
+      "seconds": 4.8,
+      "peak": 0.23,
+      "rms_db": -23.9,
+      "usage": "Showing something off.",
+      "license": "CC0-1.0 (synthesized by tactical_pack.py)"
+    },
+    {
+      "id": "t_wipe",
+      "label": "Squad Wipe",
+      "category": "Stingers",
+      "file": "t_wipe.wav",
+      "seconds": 5.2,
+      "peak": 0.2034,
+      "rms_db": -22.2,
+      "usage": "Whole squad down.",
+      "license": "CC0-1.0 (synthesized by tactical_pack.py)"
+    },
+    {
+      "id": "t_confirm",
+      "label": "Kill Confirm",
+      "category": "Reactive",
+      "file": "t_confirm.wav",
+      "seconds": 1.0,
+      "peak": 0.2198,
+      "rms_db": -23.7,
+      "usage": "Auto on kill (short).",
+      "license": "CC0-1.0 (synthesized by tactical_pack.py)"
+    },
+    {
+      "id": "t_kia",
+      "label": "K.I.A.",
+      "category": "Reactive",
+      "file": "t_kia.wav",
+      "seconds": 3.2,
+      "peak": 0.2018,
+      "rms_db": -22.8,
+      "usage": "Auto on death.",
+      "license": "CC0-1.0 (synthesized by tactical_pack.py)"
+    }
+  ]
+}

@@ -1,0 +1,73 @@
+{
+  "host": "127.0.0.1",
+  "port": 8781,
+  "engine": {
+    "type": "local",
+    "url": "http://127.0.0.1:8778",
+    "haven_v2_dir": "",
+    "packs": ["../sounds/tactical"],
+    "device": null,
+    "gain_db": 0
+  },
+  "hud": {
+    "url": "http://127.0.0.1:8790"
+  },
+  "streamlabs": {
+    "enabled": true,
+    "port": 59650,
+    "token": "",
+    "token_from_companion": "",
+    "companion_label": "slobs",
+    "duck_source": ""
+  },
+  "duck": {
+    "enabled": true,
+    "headphones_db": -9,
+    "stream_db": -8,
+    "stream_attack_ms": 60,
+    "stream_release_ms": 450,
+    "hold_ms": 150,
+    "exclude": ["t_heartbeat", "t_static"]
+  },
+  "reactive": {
+    "enabled": true,
+    "mute_overlay_sounds": true,
+    "react_to_tests": true,
+    "events": {
+      "kill":    {"enabled": true,  "clip": "t_confirm",   "cooldown": 0.6},
+      "multi":   {"enabled": true,  "clip": "t_impact",    "cooldown": 2, "min": 2},
+      "streak":  {"enabled": true,  "clip": "t_horn",      "cooldown": 5, "every": 5},
+      "downed":  {"enabled": true,  "clip": "t_heartbeat", "cooldown": 6},
+      "revived": {"enabled": true,  "clip": "t_reveal",    "cooldown": 4},
+      "death":   {"enabled": true,  "clip": "t_kia",       "cooldown": 3},
+      "win":     {"enabled": true,  "clip": "t_secured",   "cooldown": 15}
+    }
+  },
+  "combos": {
+    "airstrike": {
+      "label": "Airstrike", "color": "#c0392b",
+      "steps": [["play", "t_incoming"], ["wait", 1.5], ["play", "t_flyby"], ["wait", 1.8], ["play", "t_explosion"]]
+    },
+    "comms": {
+      "label": "Comms", "color": "#2e86de", "toggle": true,
+      "on":  [["voice", "radio"], ["play", "t_comms_open"]],
+      "off": [["play", "t_comms_close"], ["wait", 0.35], ["voice", "normal"]]
+    },
+    "clutch": {
+      "label": "Clutch", "color": "#8e44ad", "toggle": true, "max_seconds": 90,
+      "on": [], "loop": [["play", "t_heartbeat"], ["wait", 3.45]], "off": [["stop"]]
+    },
+    "match_start": {
+      "label": "Match Start", "color": "#27ae60",
+      "steps": [["play", "t_lockload"], ["wait", 1.1], ["play", "t_countdown"]]
+    },
+    "squad_wipe": {
+      "label": "Squad Wipe", "color": "#7f8c8d",
+      "steps": [["play", "t_static"], ["wait", 0.7], ["play", "t_wipe"]]
+    },
+    "victory": {
+      "label": "Victory", "color": "#d4ac0d",
+      "steps": [["play", "t_secured"], ["wait", 1.4], ["play", "t_explosion"]]
+    }
+  }
+}

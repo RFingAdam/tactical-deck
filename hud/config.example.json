@@ -1,0 +1,20 @@
+{
+  "host": "127.0.0.1",
+  "port": 8790,
+  "new_session_after_hours": 4,
+  "multikill_window_sec": 8,
+  "hotkeys_enabled": true,
+  "auto_detect": true,
+  "game_boost": false,
+  "sound_pack": "tactical",
+  "detect_fps": 4,
+  "game_exe": "WardogsClient-Win64-Shipping.exe",
+  "hotkeys": {
+    "kill": "ctrl+alt+1",
+    "death": "ctrl+alt+2",
+    "win": "ctrl+alt+3",
+    "undo": "ctrl+alt+4",
+    "reset": "ctrl+alt+0"
+  },
+  "overlay_sounds": true
+}

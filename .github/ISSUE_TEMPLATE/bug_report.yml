@@ -1,0 +1,17 @@
+name: Bug report
+description: Something doesn't work or sounds wrong
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes: { label: What happened?, description: What you pressed / what you expected / what you got }
+    validations: { required: true }
+  - type: dropdown
+    id: engine
+    attributes: { label: Engine, options: [local, haven, demo] }
+  - type: input
+    id: env
+    attributes: { label: Windows / Python / OBS-or-Streamlabs versions }
+  - type: textarea
+    id: log
+    attributes: { label: director.log (last ~30 lines), render: text }

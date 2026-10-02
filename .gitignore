@@ -1,0 +1,58 @@
+# --- Python / tooling ---------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+build/
+dist/
+build-check/
+
+# --- Personal config, secrets, runtime state (never commit) -------------------
+config.json
+config.demo.json
+*.tmp
+.env
+.env.*
+!.env.example
+*.log
+director/duck_state.json
+hud/state.json
+*.bak
+*.pre-*.bak
+
+# --- Rendered audio / media (regenerate with synth/ and hud/tools/gen_sounds.py)
+*.wav
+*.mp3
+*.ogg
+*.flac
+*.mp4
+*.mkv
+*.webm
+out/
+_media/
+Claude outputs/
+
+# --- Calibration / perf output (can contain your gameplay timelines) ----------
+hud/tools/perf.csv
+hud/tools/clip_results.jsonl
+hud/tools/center_text.txt
+hud/tools/scan_*.txt
+hud/tools/segment*.json
+hud/tools/dumps/
+hud/tools/*.png
+
+# --- Companion exports (contain your connection ids) --------------------------
+*.companionconfig
+integrations/companion/tactical-button-map.json
+
+# --- OS / editor ----------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

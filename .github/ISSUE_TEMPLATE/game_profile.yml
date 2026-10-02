@@ -1,0 +1,20 @@
+name: Game profile request
+description: Ask for (or volunteer) HUD auto-detection for a game
+labels: [game-profile]
+body:
+  - type: input
+    id: game
+    attributes: { label: Game }
+    validations: { required: true }
+  - type: textarea
+    id: cues
+    attributes:
+      label: On-screen cues
+      description: Exact text/icons the game shows for a kill, down, death and win, and where on screen. Screenshots help a lot.
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Can you help?
+      options:
+        - label: I can share a short recording for calibration
+        - label: I'd like to write the profile myself

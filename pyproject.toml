@@ -1,0 +1,19 @@
+[project]
+name = "tactical-deck"
+version = "1.0.0"
+description = "Cinematic, game-reactive soundboard for streamers: synthesized CC0 tactical SFX pack, one-button combos, auto-ducking, and an OCR kill-feed HUD."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+
+[tool.ruff]
+line-length = 145
+target-version = "py310"
+extend-exclude = ["hud"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "I"]
+ignore = ["E731", "B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

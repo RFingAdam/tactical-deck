@@ -1,0 +1,4 @@
+{
+  "engine": { "type": "local", "device": "CABLE Input (VB-Audio Virtual Cable)", "gain_db": 0 },
+  "streamlabs": { "enabled": true, "token": "PASTE-FROM-STREAMLABS-REMOTE-CONTROL", "duck_source": "Desktop Audio" }
+}

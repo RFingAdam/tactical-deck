@@ -1,0 +1,156 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Protocol HUD Control</title>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=Teko:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{--kill:#ff5a2a;--death:#5fa8ff;--win:#ffc93c;--bg:#0b0d11;--panel:#141820;--line:#232a36;--ink:#eef2f7;--mute:#8894a6}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Chakra Petch",system-ui,sans-serif}
+header{display:flex;align-items:center;gap:12px;padding:16px 22px;border-bottom:1px solid var(--line)}
+header h1{margin:0;font-size:16px;letter-spacing:.35em}
+.dot{width:10px;height:10px;border-radius:50%;background:#555}
+.dot.on{background:#3ddc84;box-shadow:0 0 10px #3ddc84}
+header .st{margin-left:auto;color:var(--mute);font-size:13px;letter-spacing:.1em}
+main{display:grid;grid-template-columns:minmax(320px,520px) 1fr;gap:20px;padding:20px}
+@media (max-width:900px){main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);padding:16px}
+.card h2{margin:0 0 12px;font-size:12px;letter-spacing:.35em;color:var(--mute)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+.stat{padding:10px 12px;border-top:3px solid var(--c);background:#0f1218}
+.stat .l{font-size:11px;letter-spacing:.3em;color:var(--c)}
+.stat .v{font-family:Teko,sans-serif;font-size:56px;line-height:1}
+.meta{display:flex;gap:18px;color:var(--mute);font-size:13px;letter-spacing:.12em}
+.meta b{color:var(--ink)}
+.big{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+button{font:inherit;color:var(--ink);background:#1b212c;border:1px solid var(--line);padding:12px;cursor:pointer;letter-spacing:.15em}
+button:hover{filter:brightness(1.25)}
+button:active{transform:translateY(1px)}
+.big button{height:96px;font-family:Teko,sans-serif;font-size:40px;letter-spacing:.08em;border-top:4px solid var(--c);background:linear-gradient(180deg,#1d2430,#141922)}
+.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.row button{flex:1 1 auto;font-size:13px}
+#reset{position:relative;overflow:hidden}
+#reset .fill{position:absolute;left:0;top:0;bottom:0;width:0;background:rgba(255,60,60,.35)}
+.k{--c:var(--kill)}.d{--c:var(--death)}.w{--c:var(--win)}
+.preview{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;border:1px solid var(--line);
+  background:#20252e url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="10" height="10" fill="%23262c36"/><rect x="10" y="10" width="10" height="10" fill="%23262c36"/></svg>')}
+.preview iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+code{display:block;background:#0f1218;border:1px solid var(--line);padding:8px 10px;margin:6px 0;font-size:13px;color:#cfe3ff;word-break:break-all;cursor:pointer}
+.hint{color:var(--mute);font-size:13px;line-height:1.55}
+kbd{background:#0f1218;border:1px solid var(--line);padding:1px 6px;font-family:inherit;font-size:12px}
+#toast{position:fixed;right:18px;bottom:18px;background:#1b212c;border:1px solid var(--line);padding:10px 14px;opacity:0;transition:opacity .2s}
+#toast.on{opacity:1}
+</style>
+</head>
+<body>
+<header><span class="dot" id="live"></span><h1>PROTOCOL HUD</h1><span class="st" id="sess">connecting…</span></header>
+<main>
+  <section>
+    <div class="card">
+      <h2>SESSION</h2>
+      <div class="stats">
+        <div class="stat k"><div class="l">KILLS</div><div class="v" id="k">0</div></div>
+        <div class="stat d"><div class="l">DEATHS</div><div class="v" id="d">0</div></div>
+        <div class="stat w"><div class="l">WINS</div><div class="v" id="w">0</div></div>
+      </div>
+      <div class="meta"><span>K/D <b id="kd">0.00</b></span><span>STREAK <b id="s">0</b></span><span>BEST <b id="b">0</b></span></div>
+      <div class="big">
+        <button class="k" data-a="kill">+ KILL</button>
+        <button class="d" data-a="death">+ DEATH</button>
+        <button class="w" data-a="win">+ WIN</button>
+      </div>
+      <div class="row">
+        <button data-a="undo">UNDO LAST</button>
+        <button id="reset"><span class="fill"></span><span style="position:relative">HOLD TO RESET</span></button>
+      </div>
+    </div>
+    <div class="card" style="margin-top:20px">
+      <h2>AUTO-DETECT (WARDOGS SCREEN READER)</h2>
+      <div class="meta" style="flex-wrap:wrap;gap:14px"><span>STATUS <b id="ad-st">…</b></span><span>GAME <b id="ad-g">…</b></span><span>SCAN <b id="ad-f">0</b>/s</span><span>AUTO KILLS <b id="ad-k">0</b></span><span>AUTO DEATHS <b id="ad-d">0</b></span><span>LAST <b id="ad-l">—</b></span></div>
+      <div class="row"><button id="ad-on">TURN ON</button><button id="ad-off">PAUSE</button></div>
+      <div class="hint" style="margin-top:8px">Reads "KILL CONFIRMED" and the downed "GIVE UP / CALL FOR HELP" prompt straight off your screen while Wardogs is focused. Hotkeys still work to fix a miss (Ctrl+Alt+4 undoes).</div>
+    </div>
+    <div class="card" style="margin-top:20px">
+      <h2>SOUND PACK</h2>
+      <div class="row" id="packs"></div>
+      <div class="hint" style="margin-top:10px">Audition here (plays in this browser only):</div>
+      <div class="row" id="audition"></div>
+    </div>
+    <div class="card" style="margin-top:20px">
+      <h2>TEST ANIMATIONS (COUNTS DON'T CHANGE)</h2>
+      <div class="row">
+        <button data-t="kill?n=1">KILL</button>
+        <button data-t="kill?n=2">DOUBLE</button>
+        <button data-t="kill?n=3">TRIPLE</button>
+        <button data-t="kill?n=5">STREAK 5</button>
+        <button data-t="kill?n=12">STREAK 12</button>
+        <button data-t="downed">DOWNED</button>
+        <button data-t="revived">REVIVED</button>
+        <button data-t="death?n=4">DEATH</button>
+        <button data-t="win">VICTORY</button>
+      </div>
+    </div>
+  </section>
+  <section>
+    <div class="card">
+      <h2>LIVE PREVIEW (MUTED)</h2>
+      <div class="preview"><iframe id="pv" src="/overlay?mute=1"></iframe></div>
+      <div class="row">
+        <button data-pos="bar">TOP BAR</button><button data-pos="tl">TOP LEFT</button><button data-pos="tr">TOP RIGHT</button>
+        <button data-pos="bl">BOTTOM LEFT</button><button data-pos="br">BOTTOM RIGHT</button>
+      </div>
+    </div>
+    <div class="card" style="margin-top:20px">
+      <h2>HOOK IT UP</h2>
+      <div class="hint">Streamlabs Browser Source URL (1920×1080). Click to copy.</div>
+      <code id="ourl"></code>
+      <div class="hint" style="margin-top:10px">Companion / Stream Deck buttons: HTTP GET to</div>
+      <code class="u">/api/kill</code><code class="u">/api/death</code><code class="u">/api/win</code><code class="u">/api/undo</code>
+      <div class="hint" style="margin-top:10px">Global hotkeys (work in-game): <kbd>Ctrl+Alt+1</kbd> kill · <kbd>Ctrl+Alt+2</kbd> death · <kbd>Ctrl+Alt+3</kbd> win · <kbd>Ctrl+Alt+4</kbd> undo · <kbd>Ctrl+Alt+0</kbd> twice = reset.<br>
+      Counters auto-zero on the first event after 4+ hours idle (i.e. your next stream). Change it in <b>config.json</b>.</div>
+    </div>
+  </section>
+</main>
+<div id="toast"></div>
+<script>
+const $ = (id) => document.getElementById(id);
+const base = location.origin;
+let pos = "bar";
+function toast(t){const e=$("toast");e.textContent=t;e.classList.add("on");clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove("on"),1400)}
+function render(s){$("k").textContent=s.kills;$("d").textContent=s.deaths;$("w").textContent=s.wins;
+  $("kd").textContent=Number(s.kd||0).toFixed(2);$("s").textContent=s.streak;$("b").textContent=s.best_streak;
+  $("sess").textContent="session since "+new Date(s.session_started*1000).toLocaleString();}
+function hit(path){return fetch(path,{method:"POST"}).then(r=>r.json()).then(s=>{if(s&&s.kills!==undefined)render(s)}).catch(()=>toast("server offline"))}
+document.querySelectorAll("[data-a]").forEach(b=>b.onclick=()=>hit("/api/"+b.dataset.a));
+document.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>fetch("/api/test/"+b.dataset.t,{method:"POST"}));
+function setUrl(){const u=`${base}/overlay${pos==="tl"?"":"?pos="+pos}`;$("ourl").textContent=u;$("pv").src="/overlay?mute=1"+(pos==="tl"?"":"&pos="+pos)}
+document.querySelectorAll("[data-pos]").forEach(b=>b.onclick=()=>{pos=b.dataset.pos;setUrl()});
+document.querySelectorAll("code.u").forEach(c=>c.textContent=base+c.textContent);
+document.querySelectorAll("code").forEach(c=>c.onclick=()=>{navigator.clipboard.writeText(c.textContent).then(()=>toast("copied"))});
+setUrl();
+// hold-to-reset
+(function(){const r=$("reset"),f=r.querySelector(".fill");let t0=0,raf=0;
+ function tick(){const p=Math.min(1,(performance.now()-t0)/1200);f.style.width=(p*100)+"%";if(p>=1){stop();hit("/api/reset");toast("counters reset")}else raf=requestAnimationFrame(tick)}
+ function stop(){cancelAnimationFrame(raf);f.style.width="0"}
+ r.addEventListener("pointerdown",()=>{t0=performance.now();raf=requestAnimationFrame(tick)});
+ ["pointerup","pointerleave"].forEach(e=>r.addEventListener(e,stop));})();
+function ad(path){fetch(path||"/api/detector").then(r=>r.json()).then(s=>{$("ad-st").textContent=s.error?"ERROR":(s.enabled?"ON":"PAUSED");$("ad-st").style.color=s.error?"#ff6b6b":(s.enabled?"#3ddc84":"#ffc93c");$("ad-g").textContent=s.game_focused?"WARDOGS FOCUSED":"NOT IN GAME";$("ad-f").textContent=s.fps||0;$("ad-k").textContent=s.kills||0;$("ad-d").textContent=s.deaths||0;$("ad-l").textContent=s.last_event?s.last_event.join(" @ "):"—";if(s.error)$("ad-st").title=s.error}).catch(()=>{})}
+$("ad-on").onclick=()=>ad("/api/detector/on");$("ad-off").onclick=()=>ad("/api/detector/off");ad();setInterval(ad,2000);
+let PACKS={},ACTIVE="";
+function drawPacks(){const w=$("packs");w.innerHTML="";
+ [...Object.keys(PACKS),"synth"].forEach(n=>{const b=document.createElement("button");b.textContent=n.toUpperCase()+(n===ACTIVE?"  ✓":"");
+  if(n===ACTIVE)b.style.borderColor="#3ddc84";b.onclick=()=>fetch("/api/soundpack/"+n,{method:"POST"}).then(()=>{ACTIVE=n;drawPacks();toast("stream now using "+n)});w.appendChild(b)});
+ const a=$("audition");a.innerHTML="";const files=PACKS[ACTIVE]||[];
+ if(!files.length){a.innerHTML='<span class="hint">Built-in synth: use the test buttons below (they play on stream).</span>';return}
+ files.forEach(f=>{const b=document.createElement("button");b.textContent="▶ "+f.replace(/\.[^.]+$/,"").toUpperCase();
+  b.onclick=()=>{const au=new Audio("/sounds/"+ACTIVE+"/"+f);au.volume=.8;au.play()};a.appendChild(b)})}
+fetch("/api/soundpacks").then(r=>r.json()).then(d=>{PACKS=d.packs;ACTIVE=d.active;drawPacks()});
+const es=new EventSource("/events");
+es.onopen=()=>$("live").classList.add("on");
+es.onerror=()=>$("live").classList.remove("on");
+es.onmessage=(m)=>{const e=JSON.parse(m.data);if(e.type==="armreset"){toast("press Ctrl+Alt+0 again to reset");return}if(e.state&&!e.test)render(e.state)};
+</script>
+</body>
+</html>

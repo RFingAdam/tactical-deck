@@ -1,0 +1,6 @@
+# Director + synth
+numpy>=1.26
+scipy>=1.11
+sounddevice>=0.4      # local engine only
+requests>=2.31        # Companion page installer
+websocket-client>=1.6 # Streamlabs ducking + Companion installer

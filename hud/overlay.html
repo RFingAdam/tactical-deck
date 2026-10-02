@@ -1,0 +1,145 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Protocol HUD Overlay</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=Teko:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--kill:#ff5a2a;--death:#5fa8ff;--win:#ffc93c;--ink:#f3f5f8;--glass:rgba(9,11,15,.78)}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}
+body{font-family:"Chakra Petch",system-ui,sans-serif;color:var(--ink)}
+#stage{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0}
+#fx{position:absolute;inset:0;width:1920px;height:1080px;pointer-events:none}
+
+/* ---------- HUD ---------- */
+#hud{position:absolute;display:flex;flex-direction:column;gap:8px;transform-origin:top left}
+.pos-tl{left:36px;top:36px}
+.pos-tr{right:36px;top:36px;align-items:flex-end;transform-origin:top right!important}
+.pos-bl{left:36px;bottom:36px;flex-direction:column-reverse!important;transform-origin:bottom left!important}
+.pos-br{right:36px;bottom:36px;align-items:flex-end;flex-direction:column-reverse!important;transform-origin:bottom right!important}
+.brand{display:flex;align-items:center;gap:10px;font-size:12px;letter-spacing:.42em;font-weight:700;color:rgba(255,255,255,.72);text-transform:uppercase}
+.brand .dot{width:8px;height:8px;border-radius:50%;background:#ff2d2d;box-shadow:0 0 10px #ff2d2d;animation:blink 1.4s infinite}
+.bar{display:flex;gap:6px}
+.tile{position:relative;width:150px;height:106px;background:var(--glass);overflow:hidden;
+  clip-path:polygon(0 0,calc(100% - 18px) 0,100% 18px,100% 100%,18px 100%,0 calc(100% - 18px))}
+.tile::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--c);box-shadow:0 0 14px var(--c)}
+.tile::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(0deg,rgba(255,255,255,.035) 0 1px,transparent 1px 3px)}
+.tile .lbl{position:absolute;left:14px;top:12px;font-size:13px;letter-spacing:.3em;font-weight:700;color:var(--c)}
+.tile .num{position:absolute;left:12px;bottom:-8px;font-family:Teko,sans-serif;font-size:82px;line-height:1;font-weight:600;
+  text-shadow:0 0 18px var(--gb)}
+.tile .ico{position:absolute;right:14px;top:10px;width:22px;height:22px;opacity:.55}
+.t-kill{--c:var(--kill);--gb:rgba(255,90,42,.45)}
+.t-death{--c:var(--death);--gb:rgba(95,168,255,.45)}
+.t-win{--c:var(--win);--gb:rgba(255,201,60,.5)}
+.tile.hit{animation:hit .55s ease-out}
+.num.tick{animation:tick .45s cubic-bezier(.2,1,.3,1)}
+.sub{display:flex;gap:18px;align-items:center;padding:7px 16px;background:var(--glass);font-size:14px;letter-spacing:.18em;font-weight:700;
+  clip-path:polygon(0 0,100% 0,calc(100% - 12px) 100%,0 100%);width:max-content}
+.sub b{font-family:Teko,sans-serif;font-size:24px;letter-spacing:.04em;font-weight:600;margin-left:6px;vertical-align:-2px}
+.sub .hot b{color:var(--kill);text-shadow:0 0 12px rgba(255,90,42,.8)}
+.sub .dim{color:rgba(255,255,255,.55)}
+
+
+/* ---------- bar layout: lives in the letterbox strip above the game ---------- */
+.pos-bar{left:40px;top:19px;flex-direction:row!important;align-items:flex-start;gap:10px!important}
+.pos-bar .brand{display:none!important}
+.pos-bar .tile{height:100px;width:136px}
+.pos-bar .tile .num{font-size:74px}
+.pos-bar .sub{flex-direction:column;align-items:flex-start;gap:2px;padding:8px 22px 8px 14px;height:100px;box-sizing:border-box;justify-content:center;font-size:12px;line-height:1.05;
+  clip-path:polygon(0 0,100% 0,calc(100% - 14px) 100%,0 100%)}
+.pos-bar .sub b{font-size:21px}
+.pos-bar #feed{flex-direction:row;gap:8px}
+body.layout-bar #callout{top:205px}
+body.layout-bar #kia{top:330px}
+.pos-bar .pop{height:100px;min-width:260px;flex-direction:row}
+
+/* ---------- feed pops ---------- */
+#feed{display:flex;flex-direction:column;gap:6px}
+.pos-bl #feed,.pos-br #feed{flex-direction:column-reverse}
+.pop{--c:var(--kill);display:flex;align-items:center;gap:14px;min-width:300px;height:64px;padding:0 26px 0 16px;
+  background:linear-gradient(90deg,rgba(9,11,15,.9),rgba(9,11,15,.62));border-left:4px solid var(--c);
+  clip-path:polygon(0 0,100% 0,calc(100% - 16px) 100%,0 100%);animation:popin .38s cubic-bezier(.2,1.25,.3,1) both}
+.pop .pt{font-family:Teko,sans-serif;font-size:40px;font-weight:600;letter-spacing:.06em;line-height:.9;padding-top:6px}
+.pop .ps{font-size:12px;letter-spacing:.28em;color:var(--c);font-weight:700}
+.pop .pv{margin-left:auto;font-family:Teko,sans-serif;font-size:42px;color:var(--c);padding-top:7px;text-shadow:0 0 14px var(--c)}
+.pop.out{animation:popout .4s ease-in forwards}
+.pos-tr .pop,.pos-br .pop{border-left:none;border-right:4px solid var(--c);clip-path:polygon(16px 0,100% 0,100% 100%,0 100%);padding:0 16px 0 30px}
+
+/* ---------- streak callout ---------- */
+#callout{--c:var(--kill);position:absolute;left:0;right:0;top:118px;text-align:center;opacity:0;pointer-events:none}
+#callout .t{font-family:Teko,sans-serif;font-size:96px;line-height:.9;font-weight:600;letter-spacing:.14em;color:#fff;
+  text-shadow:0 0 18px var(--c),0 4px 0 rgba(0,0,0,.55)}
+#callout .s{font-size:16px;letter-spacing:.6em;color:var(--c);font-weight:700;text-shadow:0 2px 0 rgba(0,0,0,.6)}
+#callout .ln{height:3px;width:0;margin:10px auto 0;background:linear-gradient(90deg,transparent,var(--c),transparent)}
+#callout.on{animation:slam 2.4s cubic-bezier(.2,.9,.2,1) forwards}
+#callout.on .ln{animation:line 2.4s ease-out forwards}
+
+/* ---------- death ---------- */
+#vig{position:absolute;inset:0;opacity:0;pointer-events:none;box-shadow:inset 0 0 240px 40px rgba(200,20,20,.55)}
+#vig.on{animation:vig 1.2s ease-out forwards}
+#kia{position:absolute;left:0;right:0;top:290px;text-align:center;opacity:0;pointer-events:none}
+#kia .t{position:relative;display:inline-block;font-family:Teko,sans-serif;font-size:124px;line-height:.9;font-weight:600;letter-spacing:.16em;
+  color:#fff;text-shadow:0 0 16px rgba(255,40,40,.55),0 4px 0 rgba(0,0,0,.5)}
+#kia .t::before,#kia .t::after{content:attr(data-t);position:absolute;left:0;top:0;width:100%}
+#kia .t::before{color:#ff2a2a;opacity:.6;clip-path:inset(18% 0 64% 0);animation:gl1 .28s steps(2) infinite}
+#kia .t::after{color:#35d4ff;opacity:.5;clip-path:inset(62% 0 22% 0);animation:gl2 .24s steps(2) infinite}
+#kia .s{font-size:16px;letter-spacing:.55em;font-weight:700;color:#ff8080;text-shadow:0 2px 6px rgba(0,0,0,.85)}
+#kia.on{animation:kia 1.9s forwards}
+
+/* ---------- victory ---------- */
+#win{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;opacity:0;pointer-events:none}
+#win .rays{position:absolute;left:50%;top:50%;width:1500px;height:1500px;margin:-750px 0 0 -750px;
+  background:repeating-conic-gradient(from 0deg,rgba(255,201,60,.12) 0 4deg,transparent 4deg 15deg);
+  -webkit-mask-image:radial-gradient(circle,#000 0,#000 14%,transparent 60%);animation:spin 10s linear infinite}
+#win .glow{position:absolute;left:50%;top:50%;width:900px;height:420px;margin:-210px 0 0 -450px;
+  background:radial-gradient(ellipse,rgba(255,190,40,.35),transparent 70%)}
+#win .tag{position:relative;font-size:24px;letter-spacing:.8em;font-weight:700;color:#ffe59a;text-shadow:0 2px 0 rgba(0,0,0,.6)}
+#win .wt{position:relative;font-family:Teko,sans-serif;font-size:220px;line-height:.82;font-weight:700;letter-spacing:.05em;
+  background:linear-gradient(100deg,#b87400 0%,#ffd24a 32%,#fffbe6 45%,#ffd24a 58%,#b87400 100%);background-size:260% 100%;
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 0 34px rgba(255,190,40,.6)) drop-shadow(0 8px 0 rgba(0,0,0,.55))}
+#win .ws{position:relative;margin-top:6px;font-size:24px;letter-spacing:.4em;font-weight:700;color:#fff;text-shadow:0 2px 0 rgba(0,0,0,.6)}
+#win.on{animation:winfade 4.6s forwards}
+#win.on .wt{animation:winslam 4.6s cubic-bezier(.2,.9,.2,1) forwards,shine 1.5s .35s ease-in-out 2}
+
+/* ---------- keyframes ---------- */
+@keyframes blink{50%{opacity:.25}}
+@keyframes hit{0%{transform:scale(1)}18%{transform:scale(1.09);background:var(--gb)}100%{transform:scale(1)}}
+@keyframes tick{0%{transform:translateY(60%);opacity:0;filter:blur(6px)}100%{transform:none;opacity:1;filter:none}}
+@keyframes popin{0%{opacity:0;transform:translateX(-40px) skewX(-12deg)}100%{opacity:1;transform:none}}
+@keyframes popout{to{opacity:0;transform:translateX(-30px)}}
+@keyframes slam{0%{opacity:0;transform:scale(1.25);filter:blur(6px)}10%{opacity:1;transform:scale(1);filter:none}15%{transform:scale(1)}82%{opacity:1;transform:scale(1)}100%{opacity:0;transform:translateY(-14px)}}
+@keyframes line{0%{width:0}20%{width:720px}100%{width:720px;opacity:0}}
+@keyframes vig{0%{opacity:0}12%{opacity:1}100%{opacity:0}}
+@keyframes kia{0%{opacity:0;transform:scale(1.25)}8%{opacity:1;transform:scale(1)}78%{opacity:1}100%{opacity:0;transform:translateY(12px)}}
+@keyframes gl1{0%{transform:translate(-6px,-2px)}50%{transform:translate(5px,1px)}100%{transform:translate(-3px,2px)}}
+@keyframes gl2{0%{transform:translate(6px,2px)}50%{transform:translate(-5px,-1px)}100%{transform:translate(3px,-2px)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes winfade{0%{opacity:0}6%{opacity:1}86%{opacity:1}100%{opacity:0}}
+@keyframes winslam{0%{transform:scale(1.35);opacity:0;filter:blur(8px)}9%{transform:scale(1);opacity:1;filter:none}14%{transform:scale(1)}100%{transform:scale(1.04)}}
+@keyframes shine{0%{background-position:100% 0}100%{background-position:0 0}}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="fx" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <div id="hud">
+    <div class="brand"><span class="dot"></span>Protocol // Live Stats</div>
+    <div class="bar">
+      <div class="tile t-kill" id="tk"><div class="lbl">KILLS</div><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#ff5a2a" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg><div class="num" id="nk">0</div></div>
+      <div class="tile t-death" id="td"><div class="lbl">DEATHS</div><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#5fa8ff" stroke-width="2"><path d="M12 3a7 7 0 0 0-7 7v4l2 2v3h10v-3l2-2v-4a7 7 0 0 0-7-7z"/><circle cx="9" cy="11" r="1.5"/><circle cx="15" cy="11" r="1.5"/></svg><div class="num" id="nd">0</div></div>
+      <div class="tile t-win" id="tw"><div class="lbl">WINS</div><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#ffc93c" stroke-width="2"><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 6H4v2a3 3 0 0 0 3 3M17 6h3v2a3 3 0 0 1-3 3M12 14v4M8 21h8"/></svg><div class="num" id="nw">0</div></div>
+    </div>
+    <div class="sub"><span>K/D<b id="kd">0.00</b></span><span id="stk" class="dim">STREAK<b id="sv">0</b></span><span class="dim">BEST<b id="bv">0</b></span></div>
+    <div id="feed"></div>
+  </div>
+  <div id="callout"><div class="t"></div><div class="s"></div><div class="ln"></div></div>
+  <div id="kia"><div class="t" data-t="K.I.A.">K.I.A.</div><div class="s"></div></div>
+  <div id="win"><div class="glow"></div><div class="rays"></div><div class="tag">MATCH COMPLETE</div><div class="wt">VICTORY</div><div class="ws"></div></div>
+</div>
+<script src="overlay.js"></script>
+</body>
+</html>
