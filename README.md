@@ -258,11 +258,19 @@ The `local` engine and the HUD work with OBS as-is. Stream-side ducking currentl
 
 ## 🎬 Using the sounds
 
-Use them in streams, videos, games and other soundboards, including commercially. Remix them, cut them up, pitch them. The only requirement ([CC BY 4.0](sounds/LICENSE)) is a credit wherever you list credits: a video description, stream panel, end card or game credits. Paste this:
+Use them in streams, videos, games and other soundboards, including commercially. Remix them, cut them up, pitch them. The only ask ([CC BY 4.0](sounds/LICENSE)) is one written credit somewhere people can find it. Paste this:
 
 ```
 Tactical Pack by SwampBewdy (twitch.tv/swampbewdy), CC BY 4.0
 ```
+
+| Where you use them | Where the credit goes (once is enough) |
+|---|---|
+| Live streams | Your channel's About section or a panel. A chat command such as `!sounds` also works. **No need to say anything on air.** |
+| YouTube / TikTok / VODs | The video description. |
+| Games, apps, mods | The credits screen or the README. |
+| Sharing the files themselves (a soundboard pack, a remix pack) | Keep `CREDITS.txt` / `LICENSE.txt` with them. |
+| Private use (practice, personal soundboard, nothing published) | Nothing needed. |
 
 Every WAV also carries the credit in its file metadata. Using them on stream? Drop a link in [Discussions](https://github.com/RFingAdam/tactical-deck/discussions) or tag the stream; I'd love to hear them in the wild.
 
