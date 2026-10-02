@@ -3,7 +3,8 @@
 Signals (calibrated on Wardogs highlight clips, 3440x1440 borderless):
   kill  -> "KILL CONFIRMED" lines that stack under the crosshair (one line per kill)
   death -> "RESPAWNING IN ..." countdown (only shows if you were NOT revived)
-  downed / revived -> "GIVE UP / CALL FOR HELP" prompt appears / clears without a respawn (info only, not counted)
+  downed / revived -> "GIVE UP / CALL FOR HELP" prompt appears / clears without a respawn (info only, not counted).
+                      A menu/inventory/map hiding the prompt, or the game losing focus, is NOT a revive.
   win   -> end-of-match scoreboard headed "VICTORY" (DEFEAT and "<TEAM> WINS" splashes are ignored)
 """
 import asyncio, re, time
@@ -28,6 +29,9 @@ RE_WIN = re.compile(r"V[I1l|]CT[O0]RY", re.I)
 RE_RESPAWN = re.compile(r"RESP[A4]WN|SP[A4]WNING\s*IN|DEPL[O0]YMENT\s*B[O0]ARD", re.I)
 RE_DAMAGELOG = re.compile(r"DAMAGE\s*L[O0]G|V[I1l]EW\s*DAMAGE", re.I)
 RE_DOWNED = re.compile(r"G[I1l]VE\s*U|F[O0]R\s*HEL|CALL\s*F[O0]R", re.I)
+# Full-screen UI (inventory, map, pause/settings, scoreboard) that can hide the downed prompt.
+RE_MENU = re.compile(r"INVENT[O0]RY|BACKPACK|L[O0]AD[O0]UT|EQUIP|SETTINGS|[O0]PTI[O0]NS|RESUME|SC[O0]REB[O0]ARD"
+                     r"|LEAVE\s*MATCH|QUIT|KEYBIND|CONTR[O0]LS|AUDI[O0]|GRAPHICS|DR[O0]P\s*ITEM", re.I)
 
 _engine = OcrEngine.try_create_from_user_profile_languages()
 _loop = asyncio.new_event_loop()
@@ -88,6 +92,14 @@ def downed_cues(frame):
     return False, ""
 
 
+def is_occluded(frame):
+    """True when a full-screen menu/inventory/map covers the HUD. The 3D world yields almost no OCR words;
+    menus yield many lines or a known menu keyword. Only called while downed, so its cost is bounded."""
+    lines = ocr_lines(v_gray(region(frame, "center")))
+    wordy = [ln for ln in lines if re.search(r"[A-Za-z]{3,}", ln)]
+    return len(wordy) >= 4 or bool(RE_MENU.search(" ".join(lines)))
+
+
 def is_downed(frame):
     c = region(frame, "downed")
     for fn in (v_gray, v_inv):
@@ -99,6 +111,10 @@ def is_downed(frame):
 
 class Detector:
     """Feed frames in order (with timestamps); get 'kill' / 'death' events back."""
+
+    REVIVE_CLEAR_S = 6.0     # downed UI must be gone this long (in visible gameplay) before "revived"
+    FEED_GAP_S = 1.5         # a longer gap between frames = game lost focus (alt-tab); restart the grace window
+    MAX_DOWN_S = 120.0       # a "revive" this long after going down is stale; clear silently instead
 
     def __init__(self, death_lock_s=20.0, burst_gap_s=2.0):
         self.death_lock_s = death_lock_s
@@ -115,10 +131,19 @@ class Detector:
         self.win_hits = 0
         self.respawn_hits = 0
         self.last_respawn_check = -1e9
+        self.down_started_ts = -1e9
+        self.last_feed_ts = None
+        self.last_occl_check = -1e9
+        self.occluded = False
 
     def feed(self, frame, ts=None):
         ts = time.time() if ts is None else ts
         events = []
+        # Frames stopped (game unfocused / paused): we know nothing about that stretch, so a downed player
+        # must be seen in gameplay for the full grace window again before we call it a revive.
+        if self.downed_active and self.last_feed_ts is not None and ts - self.last_feed_ts > self.FEED_GAP_S:
+            self.last_downed_ts = ts
+        self.last_feed_ts = ts
         n, seen = count_confirm(frame)
         if n:
             self.last_confirm_ts = ts
@@ -153,9 +178,17 @@ class Detector:
             self.last_downed_ts = ts
             if self.downed_hits >= 2 and not self.downed_active:
                 self.downed_active = True
+                self.down_started_ts = ts
                 events.append("downed")
         else:
             self.downed_hits = 0
+            # Prompt gone while downed: is a menu/inventory/map covering it? Then hold, don't count it.
+            if self.downed_active:
+                if ts - self.last_occl_check >= 0.5:
+                    self.last_occl_check = ts
+                    self.occluded = is_occluded(frame)
+                if self.occluded:
+                    self.last_downed_ts = ts
         # ---- death: respawn countdown (checked every 0.5 s) ----
         if ts - self.last_respawn_check >= 0.5:
             self.last_respawn_check = ts
@@ -168,9 +201,13 @@ class Detector:
                     self.downed_active = False
             else:
                 self.respawn_hits = 0
-        # ---- revived: ALL downed UI gone for 6 s (tolerates white-flash / blur frames) and no respawn ----
-        if self.downed_active and not down and ts - self.last_downed_ts > 6 and self.respawn_hits == 0 \
-                and ts - self.last_death_ts > 6:
+        # ---- revived: ALL downed UI gone for 6 s of visible gameplay (tolerates white-flash / blur frames,
+        #      menus, alt-tab) and no respawn countdown ----
+        if self.downed_active and not down and ts - self.last_downed_ts > self.REVIVE_CLEAR_S \
+                and self.respawn_hits == 0 and ts - self.last_death_ts > self.REVIVE_CLEAR_S:
             self.downed_active = False
-            events.append("revived")
-        return events, {"confirm": n, "confirm_lines": seen, "downed": dtext}
+            self.occluded = False
+            if ts - self.down_started_ts <= self.MAX_DOWN_S:
+                events.append("revived")
+        return events, {"confirm": n, "confirm_lines": seen, "downed": dtext,
+                        "occluded": self.occluded if self.downed_active else False}
