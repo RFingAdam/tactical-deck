@@ -12,7 +12,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "hud"))
 
 
 def _stub_winrt():
-    """wardogs_detect imports the Windows OCR bindings at import time; stub them off-Windows / in CI."""
+    """wardogs_detect imports the Windows OCR bindings (and Pillow) at import time; stub whatever is
+    missing off-Windows / in CI. The tests below replace every function that would touch them."""
+    try:
+        import PIL  # noqa: F401
+    except ImportError:
+        pil = types.ModuleType("PIL")
+        pil.Image, pil.ImageOps = types.ModuleType("PIL.Image"), types.ModuleType("PIL.ImageOps")
+        sys.modules.update({"PIL": pil, "PIL.Image": pil.Image, "PIL.ImageOps": pil.ImageOps})
     for name in ("winrt", "winrt.windows", "winrt.windows.media", "winrt.windows.media.ocr",
                  "winrt.windows.graphics", "winrt.windows.graphics.imaging",
                  "winrt.windows.storage", "winrt.windows.storage.streams"):
