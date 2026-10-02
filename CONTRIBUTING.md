@@ -3,7 +3,7 @@
 Thanks for helping make streams sound better. The most wanted contributions are:
 
 1. **Game profiles** for Protocol HUD (kill, down, death and win detection for more games).
-2. **New synthesized sounds** for `synth/tactical_pack.py`. They must be generated from code and released CC0; no samples or recordings.
+2. **New synthesized sounds** for `synth/tactical_pack.py`. They must be generated from code (no samples or recordings) and are released CC BY 4.0 like the rest of the pack.
 3. **Integrations:** OBS WebSocket ducking, Touch Portal, Stream Deck SDK, and so on.
 
 ## Dev setup
@@ -34,4 +34,4 @@ Add a builder function to `synth/tactical_pack.py` and an entry in `PACK` (id `t
 
 ## Licensing of contributions
 
-By opening a PR you agree that your contribution is licensed under this repo's licenses: code under [MIT](LICENSE), and sounds under [CC0](sounds/LICENSE). Only contribute code and sounds you wrote yourself. No ripped game assets, samples or copyrighted audio.
+By opening a PR you agree that your contribution is licensed under this repo's licenses: code under [MIT](LICENSE), and sound designs/sounds under [CC BY 4.0](sounds/LICENSE). Only contribute code and sounds you wrote yourself. No ripped game assets, samples or copyrighted audio.

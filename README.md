@@ -7,7 +7,7 @@
   <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white">
   <img alt="Windows" src="https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6?logo=windows&logoColor=white">
   <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/code-MIT-22c55e"></a>
-  <a href="sounds/LICENSE"><img alt="CC0 sounds" src="https://img.shields.io/badge/sounds-CC0-f2b233"></a>
+  <a href="sounds/LICENSE"><img alt="Sounds CC BY 4.0" src="https://img.shields.io/badge/sounds-CC%20BY%204.0-f2b233"></a>
   <br>
   <a href="https://www.twitch.tv/swampbewdy"><img alt="Watch live on Twitch" src="https://img.shields.io/badge/watch%20live-twitch.tv%2Fswampbewdy-9146FF?logo=twitch&logoColor=white&style=for-the-badge"></a>
   <a href="https://www.youtube.com/@SwampBewdy"><img alt="YouTube" src="https://img.shields.io/badge/YouTube-%40SwampBewdy-FF0000?logo=youtube&logoColor=white&style=for-the-badge"></a>
@@ -26,7 +26,7 @@
 
 Most first soundboards are an airhorn and a bruh. **Tactical Deck** is what you build after that:
 
-- 24 cinematic, military-grade stingers, all synthesized from code and released as **CC0**.
+- 24 cinematic, military-grade stingers, all synthesized from code. Free to use anywhere, **just credit SwampBewdy**.
 - **One-button combos.** Airstrike, a radio-comms toggle, a clutch heartbeat loop.
 - **Auto-ducking.** Your game audio dips under every hit and glides back.
 - **A HUD that watches your kill feed** and fires the right sound before you even reach for the deck.
@@ -41,7 +41,7 @@ Most first soundboards are an airhorn and a bruh. **Tactical Deck** is what you 
 | | |
 |---|---|
 | ▶️ **[Watch / listen to all 24 sounds](https://github.com/RFingAdam/tactical-deck/releases/latest/download/tactical_pack_preview.mp4)** (98 s video) | 🎧 [MP3 preview](https://github.com/RFingAdam/tactical-deck/releases/latest/download/tactical_pack_preview.mp3) |
-| ⬇️ **[Download the WAV pack](https://github.com/RFingAdam/tactical-deck/releases/latest/download/tactical-pack-wav.zip)**: 48 kHz, loudness-matched, CC0. Drop it into any soundboard (Streamlabs, OBS, Voicemod, Stream Deck). No Python needed. | 🧪 Or render it yourself: `python synth/tactical_pack.py sounds/tactical` |
+| ⬇️ **[Download the WAV pack](https://github.com/RFingAdam/tactical-deck/releases/latest/download/tactical-pack-wav.zip)**: 48 kHz, loudness-matched, [CC BY 4.0](#-using-the-sounds). Drop it into any soundboard (Streamlabs, OBS, Voicemod, Stream Deck). No Python needed. | 🧪 Or render it yourself: `python synth/tactical_pack.py sounds/tactical` |
 
 <p align="center"><img src="docs/media/sound-pack.png" alt="Waveforms of all 24 Tactical Pack sounds" width="100%"></p>
 
@@ -227,7 +227,7 @@ To add a profile:
 
 ```
 director/       the brain: HTTP API, combos, ducking, reactive rules, settings UI
-synth/          tactical_pack.py renders the 24-clip CC0 pack from code
+synth/          tactical_pack.py renders the 24-clip pack from code (CC BY 4.0)
 hud/            Protocol HUD overlay + OCR auto-detect (+ tools/ calibration kit)
 integrations/   companion/ page installer · haven/ pack installer
 sounds/         rendered packs land here (WAVs are git-ignored)
@@ -248,13 +248,23 @@ No. The settings UI has every button, and anything that can send an HTTP request
 
 <details><summary><b>Can I use the sounds in my own videos or another soundboard?</b></summary>
 
-Yes. They're CC0, so you can use them anywhere, commercially or not, with no credit needed. A shout-out to the stream is always appreciated 🙂
+Yes, commercially or not, under [CC BY 4.0](sounds/LICENSE). The one rule is to credit them. See [Using the sounds](#-using-the-sounds) for the line to paste.
 </details>
 
 <details><summary><b>OBS instead of Streamlabs?</b></summary>
 
 The `local` engine and the HUD work with OBS as-is. Stream-side ducking currently speaks the Streamlabs Desktop API; an OBS WebSocket ducker is a welcome PR.
 </details>
+
+## 🎬 Using the sounds
+
+Use them in streams, videos, games and other soundboards, including commercially. Remix them, cut them up, pitch them. The only requirement ([CC BY 4.0](sounds/LICENSE)) is a credit wherever you list credits: a video description, stream panel, end card or game credits. Paste this:
+
+```
+Tactical Pack by SwampBewdy (twitch.tv/swampbewdy), CC BY 4.0
+```
+
+Every WAV also carries the credit in its file metadata. Using them on stream? Drop a link in [Discussions](https://github.com/RFingAdam/tactical-deck/discussions) or tag the stream; I'd love to hear them in the wild.
 
 ## 🤝 Contributing
 
@@ -263,7 +273,8 @@ Issues and PRs are welcome, especially game profiles, new combos and new synthes
 ## 📜 License
 
 - **Code:** [MIT](LICENSE).
-- **Sounds:** [CC0 1.0](sounds/LICENSE).
+- **Sounds and the sound generators** (`synth/`, `hud/tools/gen_sounds.py` and everything they render): [CC BY 4.0](sounds/LICENSE). Credit required, see [Using the sounds](#-using-the-sounds).
+- v1.0.0 (the first day's release) shipped the sounds as CC0. Copies taken from that release stay CC0; everything from v1.1.0 on is CC BY 4.0.
 - The SwampBewdy name and branding, and game names and screenshots, aren't covered by either license. Wardogs is a trademark of its respective owner; this project isn't affiliated with or endorsed by its developers.
 
 ---

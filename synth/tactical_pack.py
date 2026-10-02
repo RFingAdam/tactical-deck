@@ -1,5 +1,8 @@
-"""Tactical Cinematic SFX pack -- every sound is synthesized from scratch (no samples), so the
-whole pack can be released under CC0.  Requires numpy + scipy.
+"""Tactical Cinematic SFX pack -- every sound is synthesized from scratch (no samples).  Requires numpy + scipy.
+
+License: this file (the sound designs) and everything it renders are CC BY 4.0. Credit line:
+    Tactical Pack by SwampBewdy (twitch.tv/swampbewdy), CC BY 4.0
+See sounds/LICENSE. The rest of the repository is MIT.
 
     python tactical_pack.py OUT_DIR [--preview]
 
@@ -520,6 +523,24 @@ def master(x: np.ndarray, level=-22.0, peak=0.23) -> np.ndarray:
     return x.astype(np.float32)
 
 
+LICENSE_ID = "CC-BY-4.0"
+CREDIT = "Tactical Pack by SwampBewdy (twitch.tv/swampbewdy), CC BY 4.0"
+
+
+def tag_wav(path: Path, title: str) -> None:
+    """Embed title / artist / copyright (credit line) as a RIFF LIST/INFO chunk, so the credit travels
+    with every file. Players and DAWs show it; audio data is untouched."""
+    def field(key: bytes, text: str) -> bytes:
+        b = text.encode("utf-8") + b"\0"
+        b += b"\0" * (len(b) % 2)
+        return key + len(b).to_bytes(4, "little") + b
+    info = b"INFO" + field(b"INAM", title) + field(b"IART", "SwampBewdy") + field(b"IPRD", "Tactical Pack") \
+        + field(b"ICOP", CREDIT) + field(b"ICMT", "https://github.com/RFingAdam/tactical-deck")
+    raw = bytearray(path.read_bytes()) + b"LIST" + len(info).to_bytes(4, "little") + info
+    raw[4:8] = (len(raw) - 8).to_bytes(4, "little")
+    path.write_bytes(bytes(raw))
+
+
 # Snapshot after every import-time draw (reverb IRs), so each build() starts from the same state
 # and repeated builds in one process are byte-identical.
 _RNG_START = RNG.bit_generator.state
@@ -536,11 +557,12 @@ def build(out_dir: Path, preview=False):
         x = fade_tail(x[: int(alive[-1]) + 2400], 0.05) if len(alive) else x
         path = out_dir / f"{ident}.wav"
         wavfile.write(path, SR, x)
+        tag_wav(path, label)
         rms = float(np.sqrt(np.mean(x.astype(np.float64) ** 2)))
         manifest.append({"id": ident, "label": label, "category": category, "file": path.name,
                          "seconds": round(len(x) / SR, 3), "peak": round(float(np.max(np.abs(x))), 4),
                          "rms_db": round(20 * math.log10(max(rms, 1e-9)), 1), "usage": usage,
-                         "license": "CC0-1.0 (synthesized by tactical_pack.py)"})
+                         "license": LICENSE_ID, "credit": CREDIT})
         previews += [x, np.zeros(SR // 2, dtype=np.float32)]
         print(f"{ident:15} {label:18} {len(x)/SR:5.2f}s peak={np.max(np.abs(x)):.3f}")
     (out_dir / "pack.json").write_text(json.dumps({"name": "Tactical Cinematic", "rate": SR, "clips": manifest}, indent=2))

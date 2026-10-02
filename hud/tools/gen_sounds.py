@@ -1,4 +1,5 @@
 """Renders the Protocol HUD sound packs to 48 kHz stereo WAV (numpy only).
+License: this file and the sounds it renders are CC BY 4.0 (credit: "Sounds by SwampBewdy"), see sounds/LICENSE.
 python tools/gen_sounds.py   ->  sounds/tactical/*.wav, sounds/cinematic/*.wav
 """
 import os, wave

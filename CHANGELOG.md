@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.1.0 (2026-10-02)
+
+- **Sounds relicensed to CC BY 4.0.** Still free for any use, including commercial, with a credit: *Tactical Pack by SwampBewdy (twitch.tv/swampbewdy), CC BY 4.0*. The credit is also embedded in every WAV's metadata. Copies taken from v1.0.0 remain CC0.
+- **HUD:** opening the inventory, map or a menu while downed (or alt-tabbing) no longer fires a false "revived". A second "downed" no longer fires when the prompt comes back, and stale revives more than 120 s after a down are dropped.
+- **Director:** Stop All now restores the voice if a toggle like Comms had switched it to radio.
+
 ## v1.0.0 (2026-10-02)
 
 First public release.

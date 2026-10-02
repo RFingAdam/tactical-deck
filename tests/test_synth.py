@@ -20,7 +20,7 @@ def test_all_clips_rendered(pack):
     assert len(meta["clips"]) == 24
     for c in meta["clips"]:
         assert (out / c["file"]).exists()
-        assert c["license"].startswith("CC0")
+        assert c["license"] == "CC-BY-4.0" and "SwampBewdy" in c["credit"]
 
 
 def test_loudness_spec(pack):
@@ -42,3 +42,11 @@ def test_deterministic(tmp_path, pack):
         a = hashlib.sha256((out / c["file"]).read_bytes()).hexdigest()
         b = hashlib.sha256((tmp_path / c["file"]).read_bytes()).hexdigest()
         assert a == b, c["id"]
+
+
+def test_credit_is_embedded_in_every_wav(pack):
+    out, meta = pack
+    for c in meta["clips"]:
+        raw = (out / c["file"]).read_bytes()
+        assert b"LIST" in raw and b"Tactical Pack by SwampBewdy" in raw, c["id"]
+        assert int.from_bytes(raw[4:8], "little") == len(raw) - 8   # RIFF size still valid
