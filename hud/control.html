@@ -6,7 +6,7 @@
 <title>Protocol HUD Control</title>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=Teko:wght@500;600&display=swap" rel="stylesheet">
 <style>
-:root{--kill:#ff5a2a;--death:#5fa8ff;--win:#ffc93c;--bg:#0b0d11;--panel:#141820;--line:#232a36;--ink:#eef2f7;--mute:#8894a6}
+:root{--kill:#ff5a2a;--death:#5fa8ff;--win:#ffc93c;--cash:#62c04e;--bg:#0b0d11;--panel:#141820;--line:#232a36;--ink:#eef2f7;--mute:#8894a6}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:"Chakra Petch",system-ui,sans-serif}
 header{display:flex;align-items:center;gap:12px;padding:16px 22px;border-bottom:1px solid var(--line)}
@@ -33,7 +33,12 @@ button:active{transform:translateY(1px)}
 .row button{flex:1 1 auto;font-size:13px}
 #reset{position:relative;overflow:hidden}
 #reset .fill{position:absolute;left:0;top:0;bottom:0;width:0;background:rgba(255,60,60,.35)}
-.k{--c:var(--kill)}.d{--c:var(--death)}.w{--c:var(--win)}
+.k{--c:var(--kill)}.d{--c:var(--death)}.w{--c:var(--win)}.c{--c:var(--cash)}
+.themes{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.themes button{display:grid;gap:4px;text-align:left;padding:10px 12px;border-left:4px solid var(--sw);letter-spacing:.08em}
+.themes button b{font-family:Teko,sans-serif;font-size:24px;font-weight:600;letter-spacing:.06em;line-height:1}
+.themes button small{color:var(--mute);font-size:11.5px;letter-spacing:.04em;line-height:1.35}
+.themes button.on{background:#232b37;border-color:var(--sw);box-shadow:inset 0 0 0 1px var(--sw)}
 .preview{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;border:1px solid var(--line);
   background:#20252e url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="10" height="10" fill="%23262c36"/><rect x="10" y="10" width="10" height="10" fill="%23262c36"/></svg>')}
 .preview iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
@@ -55,7 +60,7 @@ kbd{background:#0f1218;border:1px solid var(--line);padding:1px 6px;font-family:
         <div class="stat d"><div class="l">DEATHS</div><div class="v" id="d">0</div></div>
         <div class="stat w"><div class="l">WINS</div><div class="v" id="w">0</div></div>
       </div>
-      <div class="meta"><span>K/D <b id="kd">0.00</b></span><span>STREAK <b id="s">0</b></span><span>BEST <b id="b">0</b></span></div>
+      <div class="meta"><span>K/D <b id="kd">0.00</b></span><span>STREAK <b id="s">0</b></span><span>BEST <b id="b">0</b></span><span>DEBT PAID <b id="cash" style="color:var(--cash)">$0</b></span></div>
       <div class="big">
         <button class="k" data-a="kill">+ KILL</button>
         <button class="d" data-a="death">+ DEATH</button>
@@ -70,7 +75,7 @@ kbd{background:#0f1218;border:1px solid var(--line);padding:1px 6px;font-family:
       <h2>AUTO-DETECT (WARDOGS SCREEN READER)</h2>
       <div class="meta" style="flex-wrap:wrap;gap:14px"><span>STATUS <b id="ad-st">…</b></span><span>GAME <b id="ad-g">…</b></span><span>SCAN <b id="ad-f">0</b>/s</span><span>AUTO KILLS <b id="ad-k">0</b></span><span>AUTO DEATHS <b id="ad-d">0</b></span><span>LAST <b id="ad-l">—</b></span></div>
       <div class="row"><button id="ad-on">TURN ON</button><button id="ad-off">PAUSE</button></div>
-      <div class="hint" style="margin-top:8px">Reads "KILL CONFIRMED" and the downed "GIVE UP / CALL FOR HELP" prompt straight off your screen while Wardogs is focused. Hotkeys still work to fix a miss (Ctrl+Alt+4 undoes).</div>
+      <div class="hint" style="margin-top:8px">Reads "KILL CONFIRMED", the downed "GIVE UP / CALL FOR HELP" prompt, the VICTORY scoreboard and your cash balance (top right) straight off your screen while Wardogs is focused. Hotkeys still work to fix a miss (Ctrl+Alt+4 undoes).</div>
     </div>
     <div class="card" style="margin-top:20px">
       <h2>SOUND PACK</h2>
@@ -90,10 +95,16 @@ kbd{background:#0f1218;border:1px solid var(--line);padding:1px 6px;font-family:
         <button data-t="revived">REVIVED</button>
         <button data-t="death?n=4">DEATH</button>
         <button data-t="win">VICTORY</button>
+        <button data-t="cash?n=47396">PAYDAY</button>
       </div>
     </div>
   </section>
   <section>
+    <div class="card" style="margin-bottom:20px">
+      <h2>OVERLAY THEME</h2>
+      <div class="themes" id="themes"></div>
+      <div class="hint" style="margin-top:10px">Changes the overlay on stream right away. No Streamlabs change needed. Positions are the same in every theme.</div>
+    </div>
     <div class="card">
       <h2>LIVE PREVIEW (MUTED)</h2>
       <div class="preview"><iframe id="pv" src="/overlay?mute=1"></iframe></div>
@@ -121,7 +132,8 @@ let pos = "bar";
 function toast(t){const e=$("toast");e.textContent=t;e.classList.add("on");clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove("on"),1400)}
 function render(s){$("k").textContent=s.kills;$("d").textContent=s.deaths;$("w").textContent=s.wins;
   $("kd").textContent=Number(s.kd||0).toFixed(2);$("s").textContent=s.streak;$("b").textContent=s.best_streak;
-  $("sess").textContent="session since "+new Date(s.session_started*1000).toLocaleString();}
+  $("sess").textContent="session since "+new Date(s.session_started*1000).toLocaleString();
+  const cd=s.cash_delta;$("cash").textContent=cd==null?"waiting for first reading":"$"+Number(cd).toLocaleString("en-US");}
 function hit(path){return fetch(path,{method:"POST"}).then(r=>r.json()).then(s=>{if(s&&s.kills!==undefined)render(s)}).catch(()=>toast("server offline"))}
 document.querySelectorAll("[data-a]").forEach(b=>b.onclick=()=>hit("/api/"+b.dataset.a));
 document.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>fetch("/api/test/"+b.dataset.t,{method:"POST"}));
@@ -138,6 +150,13 @@ setUrl();
  ["pointerup","pointerleave"].forEach(e=>r.addEventListener(e,stop));})();
 function ad(path){fetch(path||"/api/detector").then(r=>r.json()).then(s=>{$("ad-st").textContent=s.error?"ERROR":(s.enabled?"ON":"PAUSED");$("ad-st").style.color=s.error?"#ff6b6b":(s.enabled?"#3ddc84":"#ffc93c");$("ad-g").textContent=s.game_focused?"WARDOGS FOCUSED":"NOT IN GAME";$("ad-f").textContent=s.fps||0;$("ad-k").textContent=s.kills||0;$("ad-d").textContent=s.deaths||0;$("ad-l").textContent=s.last_event?s.last_event.join(" @ "):"—";if(s.error)$("ad-st").title=s.error}).catch(()=>{})}
 $("ad-on").onclick=()=>ad("/api/detector/on");$("ad-off").onclick=()=>ad("/api/detector/off");ad();setInterval(ad,2000);
+const THEMES=[["protocol","PROTOCOL","Angled glass plates, neon accents","#ff5a2a"],["fieldkit","FIELD KIT","Matches the game's menu boxes","#e8a33d"],
+ ["nvg","NIGHT VISION","Green phosphor, scanlines","#8dff7a"],["stencil","STENCIL OPS","Olive drab, stencil type","#a5d65f"],["killfeed","KILLFEED","No plates, most minimal","#ffffff"]];
+let THEME="";
+function drawThemes(){const w=$("themes");w.innerHTML="";THEMES.forEach(([id,name,desc,sw])=>{const b=document.createElement("button");
+  b.style.setProperty("--sw",sw);b.className=id===THEME?"on":"";b.innerHTML="<b></b><small></small>";b.querySelector("b").textContent=name+(id===THEME?"  ✓":"");
+  b.querySelector("small").textContent=desc;b.onclick=()=>fetch("/api/theme/"+id,{method:"POST"}).then(r=>r.json()).then(d=>{THEME=d.theme;drawThemes();toast("overlay now "+name)}).catch(()=>toast("server offline"));w.appendChild(b)})}
+fetch("/api/theme").then(r=>r.json()).then(d=>{THEME=d.theme;drawThemes()}).catch(()=>{});
 let PACKS={},ACTIVE="";
 function drawPacks(){const w=$("packs");w.innerHTML="";
  [...Object.keys(PACKS),"synth"].forEach(n=>{const b=document.createElement("button");b.textContent=n.toUpperCase()+(n===ACTIVE?"  ✓":"");
@@ -150,7 +169,9 @@ fetch("/api/soundpacks").then(r=>r.json()).then(d=>{PACKS=d.packs;ACTIVE=d.activ
 const es=new EventSource("/events");
 es.onopen=()=>$("live").classList.add("on");
 es.onerror=()=>$("live").classList.remove("on");
-es.onmessage=(m)=>{const e=JSON.parse(m.data);if(e.type==="armreset"){toast("press Ctrl+Alt+0 again to reset");return}if(e.state&&!e.test)render(e.state)};
+es.onmessage=(m)=>{const e=JSON.parse(m.data);if(e.type==="armreset"){toast("press Ctrl+Alt+0 again to reset");return}
+ if(e.type==="theme"){THEME=e.name;drawThemes();return}if(e.type==="hello"&&e.theme&&e.theme!==THEME){THEME=e.theme;drawThemes()}
+ if(e.state&&!e.test)render(e.state)};
 </script>
 </body>
 </html>

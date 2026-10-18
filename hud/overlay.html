@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <title>Protocol HUD Overlay</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=Teko:wght@500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=Teko:wght@500;600;700&family=Barlow+Condensed:wght@600;700&family=Share+Tech+Mono&family=Black+Ops+One&family=Stardos+Stencil:wght@700&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
 <style>
-:root{--kill:#ff5a2a;--death:#5fa8ff;--win:#ffc93c;--ink:#f3f5f8;--glass:rgba(9,11,15,.78)}
+:root{--kill:#ff5a2a;--death:#5fa8ff;--win:#ffc93c;--cash:#3ddc84;--ink:#f3f5f8;--glass:rgba(9,11,15,.78)}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}
 body{font-family:"Chakra Petch",system-ui,sans-serif;color:var(--ink)}
 #stage{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0}
@@ -33,6 +33,9 @@ body{font-family:"Chakra Petch",system-ui,sans-serif;color:var(--ink)}
 .t-kill{--c:var(--kill);--gb:rgba(255,90,42,.45)}
 .t-death{--c:var(--death);--gb:rgba(95,168,255,.45)}
 .t-win{--c:var(--win);--gb:rgba(255,201,60,.5)}
+.t-cash{--c:var(--cash);--gb:rgba(61,220,132,.42);width:210px}
+.t-cash.neg{--c:#ff6b6b;--gb:rgba(255,107,107,.4)}
+.tile .num.money{font-size:58px;bottom:-3px;letter-spacing:.01em}
 .tile.hit{animation:hit .55s ease-out}
 .num.tick{animation:tick .45s cubic-bezier(.2,1,.3,1)}
 .sub{display:flex;gap:18px;align-items:center;padding:7px 16px;background:var(--glass);font-size:14px;letter-spacing:.18em;font-weight:700;
@@ -47,6 +50,12 @@ body{font-family:"Chakra Petch",system-ui,sans-serif;color:var(--ink)}
 .pos-bar .brand{display:none!important}
 .pos-bar .tile{height:100px;width:136px}
 .pos-bar .tile .num{font-size:74px}
+/* debt tracker: its own corner, so the kill/death tiles and the feed keep their positions */
+#cashbox{position:absolute;right:36px;top:36px;transform-origin:top right}
+body.layout-tr #cashbox{right:auto;left:36px;transform-origin:top left}
+body.layout-bar #cashbox{right:40px;top:19px}
+body.layout-bar #cashbox .tile{height:100px;width:196px}
+body.layout-bar #cashbox .tile .num.money{font-size:54px}
 .pos-bar .sub{flex-direction:column;align-items:flex-start;gap:2px;padding:8px 22px 8px 14px;height:100px;box-sizing:border-box;justify-content:center;font-size:12px;line-height:1.05;
   clip-path:polygon(0 0,100% 0,calc(100% - 14px) 100%,0 100%)}
 .pos-bar .sub b{font-size:21px}
@@ -104,6 +113,106 @@ body.layout-bar #kia{top:330px}
 #win.on{animation:winfade 4.6s forwards}
 #win.on .wt{animation:winslam 4.6s cubic-bezier(.2,.9,.2,1) forwards,shine 1.5s .35s ease-in-out 2}
 
+/* =====================================================================
+   THEMES  (?theme=protocol | fieldkit | nvg | stencil | killfeed)
+   Geometry is shared by every theme: tile and pop positions never move,
+   so the editing tools that read the top bar keep working.
+   ===================================================================== */
+.tile .ico{color:var(--c)}
+.tile .ico svg,.tile svg.ico{width:22px;height:22px;display:block}
+.pos-bar .sub{width:112px}
+
+/* ---------- FIELD KIT: matches the game's own menu chips ---------- */
+body.theme-fieldkit{--kill:#e8a33d;--death:#93a7b8;--win:#d8c27a;--cash:#62c04e;--ink:#eef1f3}
+.theme-fieldkit .tile{background:rgba(29,31,32,.88);border:1px solid rgba(214,220,226,.24);clip-path:none;border-radius:2px;box-sizing:border-box}
+.theme-fieldkit .tile::before{top:auto;bottom:0;height:2px;opacity:.85;box-shadow:none}
+.theme-fieldkit .tile::after{display:none}
+.theme-fieldkit .tile .lbl{font-family:"Barlow Condensed",sans-serif;font-weight:600;font-size:15px;letter-spacing:.16em;color:#b9c0c6;top:10px}
+.theme-fieldkit .tile .lbl::before{content:"";display:inline-block;width:6px;height:6px;margin-right:7px;vertical-align:2px;background:var(--c)}
+.theme-fieldkit .tile .num{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:52px;line-height:1;bottom:12px;left:13px;color:var(--ink);text-shadow:0 2px 0 rgba(0,0,0,.55);font-variant-numeric:tabular-nums}
+.theme-fieldkit .tile .num.money{font-size:42px;bottom:14px}
+.pos-bar .theme-fieldkit .tile .num,body.theme-fieldkit .pos-bar .tile .num{font-size:52px}
+body.theme-fieldkit.layout-bar #cashbox .tile .num.money{font-size:42px}
+body.theme-nvg.layout-bar #cashbox .tile .num.money{font-size:38px}
+body.theme-stencil.layout-bar #cashbox .tile .num.money{font-size:34px}
+body.theme-killfeed.layout-bar #cashbox .tile .num.money{font-size:48px}
+.theme-fieldkit .tile .ico{opacity:.9;top:11px}
+.theme-fieldkit .sub{background:rgba(29,31,32,.88);border:1px solid rgba(214,220,226,.24);clip-path:none;font-family:"Barlow Condensed",sans-serif;font-size:14px;letter-spacing:.14em;color:#b9c0c6}
+.theme-fieldkit .sub b{font-family:"Barlow Condensed",sans-serif;font-weight:700;color:var(--ink)}
+.theme-fieldkit .sub .hot b{color:var(--kill);text-shadow:none}
+.theme-fieldkit .pop{background:rgba(29,31,32,.92);border:1px solid rgba(214,220,226,.22);border-left:3px solid var(--c);clip-path:none;box-sizing:border-box}
+.theme-fieldkit .pop .pt{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:34px;letter-spacing:.05em;padding-top:2px}
+.theme-fieldkit .pop .ps{font-family:"Barlow Condensed",sans-serif;font-weight:600;font-size:14px;letter-spacing:.18em;color:#aeb6bd}
+.theme-fieldkit .pop .pv{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:36px;text-shadow:none;padding-top:2px}
+.theme-fieldkit #callout .t{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:84px;letter-spacing:.24em;text-shadow:0 3px 0 rgba(0,0,0,.6)}
+.theme-fieldkit #callout .t::before{content:"[ ";color:var(--c);opacity:.75}
+.theme-fieldkit #callout .t::after{content:" ]";color:var(--c);opacity:.75}
+.theme-fieldkit #callout .s{font-family:"Barlow Condensed",sans-serif;font-size:17px;letter-spacing:.5em;color:#d3d9de}
+.theme-fieldkit #callout .ln{height:1px}
+
+/* ---------- NIGHT VISION: green phosphor, scanlines, bloom ---------- */
+body.theme-nvg{--kill:#8dff7a;--death:#ffb347;--win:#d8ff8a;--cash:#6dffc0;--ink:#c9ffc1}
+.theme-nvg .tile{background:rgba(3,16,7,.86);border:1px solid rgba(120,255,140,.38);clip-path:none;box-sizing:border-box;box-shadow:inset 0 0 22px rgba(80,255,120,.14)}
+.theme-nvg .tile::before{display:none}
+.theme-nvg .tile::after{background:repeating-linear-gradient(0deg,rgba(130,255,150,.07) 0 1px,transparent 1px 3px)}
+.theme-nvg .tile .lbl{font-family:"Share Tech Mono",monospace;font-size:14px;letter-spacing:.2em;color:var(--c);opacity:.85;text-shadow:0 0 8px var(--c)}
+.theme-nvg .tile .num{font-family:"Share Tech Mono",monospace;font-size:62px;bottom:2px;left:13px;color:var(--c);text-shadow:0 0 10px var(--c),0 0 26px rgba(120,255,140,.35)}
+.theme-nvg .tile .num.money{font-size:40px;bottom:8px}
+.theme-nvg .tile .ico{filter:drop-shadow(0 0 4px var(--c))}
+.theme-nvg .sub{background:rgba(3,16,7,.86);border:1px solid rgba(120,255,140,.3);clip-path:none;font-family:"Share Tech Mono",monospace;color:#9fe39a;letter-spacing:.12em}
+.theme-nvg .sub b{font-family:"Share Tech Mono",monospace;color:var(--ink);text-shadow:0 0 8px rgba(120,255,140,.6)}
+.theme-nvg .sub .hot b{color:var(--kill)}
+.theme-nvg .pop{background:rgba(3,16,7,.9);border:1px solid rgba(120,255,140,.32);border-left:3px solid var(--c);clip-path:none;box-sizing:border-box;box-shadow:inset 0 0 20px rgba(80,255,120,.12)}
+.theme-nvg .pop .pt{font-family:"Share Tech Mono",monospace;font-size:28px;color:var(--c);text-shadow:0 0 10px var(--c);padding-top:0}
+.theme-nvg .pop .pt::before{content:"\25B8 "}
+.theme-nvg .pop .ps{font-family:"Share Tech Mono",monospace;font-size:12px;letter-spacing:.2em;color:#9fe39a}
+.theme-nvg .pop .pv{font-family:"Share Tech Mono",monospace;font-size:30px;padding-top:0}
+.theme-nvg #callout .t{font-family:"Share Tech Mono",monospace;font-size:84px;letter-spacing:.2em;color:var(--c);text-shadow:0 0 14px var(--c),0 0 40px rgba(120,255,140,.45)}
+.theme-nvg #callout.on .t{animation:nvflick .5s steps(2) 2}
+.theme-nvg #callout .s{font-family:"Share Tech Mono",monospace;color:#9fe39a}
+@keyframes nvflick{0%{opacity:.35}50%{opacity:1}100%{opacity:.7}}
+
+/* ---------- STENCIL OPS: olive drab plates, stencil type, hazard stripes ---------- */
+body.theme-stencil{--kill:#e3b25e;--death:#d0503a;--win:#ecd585;--cash:#a5d65f;--ink:#f1e8cc}
+.theme-stencil .tile{background:linear-gradient(160deg,#53643a 0%,#3f4c2b 58%,#323c23 100%);border:2px solid #1d2416;box-sizing:border-box;
+  clip-path:polygon(9px 0,calc(100% - 9px) 0,100% 9px,100% calc(100% - 9px),calc(100% - 9px) 100%,9px 100%,0 calc(100% - 9px),0 9px)}
+.theme-stencil .tile::before{top:auto;bottom:0;height:4px;box-shadow:none}
+.theme-stencil .tile::after{background:radial-gradient(circle at 8px 8px,rgba(0,0,0,.5) 1.6px,transparent 2.2px),radial-gradient(circle at calc(100% - 8px) 8px,rgba(0,0,0,.5) 1.6px,transparent 2.2px),
+  repeating-linear-gradient(115deg,rgba(255,255,255,.025) 0 2px,transparent 2px 7px)}
+.theme-stencil .tile .lbl{font-family:"Stardos Stencil",serif;font-weight:700;font-size:16px;letter-spacing:.14em;color:#e6dbb8;left:16px}
+.theme-stencil .tile .num{font-family:"Black Ops One",sans-serif;font-size:60px;bottom:4px;left:15px;color:var(--ink);text-shadow:0 3px 0 rgba(0,0,0,.45)}
+.theme-stencil .tile .num.money{font-size:36px;bottom:12px}
+.theme-stencil .tile .ico{opacity:.95;right:12px}
+.theme-stencil .sub{background:linear-gradient(160deg,#4a5a33,#323c23);border:2px solid #1d2416;clip-path:none;font-family:"Stardos Stencil",serif;font-weight:700;color:#e6dbb8}
+.theme-stencil .sub b{font-family:"Black Ops One",sans-serif;font-size:20px;color:var(--ink)}
+.theme-stencil .sub .hot b{color:var(--kill);text-shadow:none}
+.theme-stencil .pop{background:linear-gradient(160deg,#4a5a33,#323c23);border:2px solid #1d2416;border-left:8px solid var(--c);clip-path:none;box-sizing:border-box}
+.theme-stencil .pop.k-death{border-left:2px solid #1d2416;padding-left:22px;background:repeating-linear-gradient(-45deg,var(--death) 0 7px,#1b1b17 7px 14px) left/12px 100% no-repeat,linear-gradient(160deg,#4a5a33,#323c23)}
+.theme-stencil .pop .pt{font-family:"Black Ops One",sans-serif;font-size:30px;letter-spacing:.04em;color:var(--ink);padding-top:2px}
+.theme-stencil .pop .ps{font-family:"Stardos Stencil",serif;font-weight:700;font-size:14px;letter-spacing:.16em}
+.theme-stencil .pop .pv{font-family:"Black Ops One",sans-serif;font-size:32px;text-shadow:none;padding-top:2px}
+.theme-stencil #callout .t{font-family:"Black Ops One",sans-serif;font-size:92px;letter-spacing:.08em;color:var(--ink);text-shadow:0 5px 0 rgba(0,0,0,.5)}
+.theme-stencil #callout.on .t{display:inline-block;transform:rotate(-2deg)}
+.theme-stencil #callout .s{font-family:"Stardos Stencil",serif;font-weight:700;font-size:18px;letter-spacing:.4em}
+
+/* ---------- KILLFEED: no plates, clean numerals, thin colour rules ---------- */
+body.theme-killfeed{--kill:#ff6a3d;--death:#4aa3ff;--win:#ffd34d;--cash:#43e08a;--ink:#ffffff}
+.theme-killfeed .tile{background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,0));clip-path:none}
+.theme-killfeed .tile::before{top:auto;bottom:0;height:2px;box-shadow:0 0 10px var(--c)}
+.theme-killfeed .tile::after{display:none}
+.theme-killfeed .tile .lbl{font-family:"Rajdhani",sans-serif;font-weight:700;font-size:14px;letter-spacing:.26em;color:rgba(255,255,255,.72)}
+.theme-killfeed .tile .num{font-family:"Rajdhani",sans-serif;font-weight:700;font-size:70px;bottom:-6px;color:var(--ink);text-shadow:0 2px 14px rgba(0,0,0,.6)}
+.theme-killfeed .tile .num.money{font-size:50px;bottom:6px}
+.theme-killfeed .tile .ico{opacity:.8}
+.theme-killfeed .sub{background:transparent;clip-path:none;font-family:"Rajdhani",sans-serif;font-weight:700;color:rgba(255,255,255,.7)}
+.theme-killfeed .sub b{font-family:"Rajdhani",sans-serif;font-weight:700;color:#fff}
+.theme-killfeed .pop{background:linear-gradient(90deg,rgba(0,0,0,.62),rgba(0,0,0,0));border-left:2px solid var(--c);clip-path:none}
+.theme-killfeed .pop .pt{font-family:"Rajdhani",sans-serif;font-weight:700;font-size:32px;letter-spacing:.06em;padding-top:2px}
+.theme-killfeed .pop .ps{font-family:"Rajdhani",sans-serif;font-weight:700;font-size:13px;letter-spacing:.24em}
+.theme-killfeed .pop .pv{font-family:"Rajdhani",sans-serif;font-weight:700;font-size:32px;text-shadow:none;padding-top:2px}
+.theme-killfeed #callout .t{font-family:"Rajdhani",sans-serif;font-weight:700;font-size:78px;letter-spacing:.38em;text-shadow:0 2px 18px rgba(0,0,0,.7)}
+.theme-killfeed #callout .s{font-family:"Rajdhani",sans-serif;font-weight:700}
+
 /* ---------- keyframes ---------- */
 @keyframes blink{50%{opacity:.25}}
 @keyframes hit{0%{transform:scale(1)}18%{transform:scale(1.09);background:var(--gb)}100%{transform:scale(1)}}
@@ -136,6 +245,7 @@ body.layout-bar #kia{top:330px}
     <div class="sub"><span>K/D<b id="kd">0.00</b></span><span id="stk" class="dim">STREAK<b id="sv">0</b></span><span class="dim">BEST<b id="bv">0</b></span></div>
     <div id="feed"></div>
   </div>
+  <div id="cashbox"><div class="tile t-cash" id="tc"><div class="lbl">DEBT PAID</div><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#3ddc84" stroke-width="2"><path d="M12 2v20M17 6.5C17 4.6 14.8 3 12 3S7 4.6 7 6.5 9.2 9.5 12 10s5 1.6 5 3.5-2.2 3.5-5 3.5-5-1.6-5-3.5"/></svg><div class="num money" id="nc">$0</div></div></div>
   <div id="callout"><div class="t"></div><div class="s"></div><div class="ln"></div></div>
   <div id="kia"><div class="t" data-t="K.I.A.">K.I.A.</div><div class="s"></div></div>
   <div id="win"><div class="glow"></div><div class="rays"></div><div class="tag">MATCH COMPLETE</div><div class="wt">VICTORY</div><div class="ws"></div></div>

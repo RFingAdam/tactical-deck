@@ -45,6 +45,7 @@ def scripted(monkeypatch):
     monkeypatch.setattr(wd, "region", lambda f, name: (f, name))
     monkeypatch.setattr(wd, "v_gray", lambda c: c)
     monkeypatch.setattr(wd, "ocr_lines", lambda c: c[0].get(c[1], []))
+    monkeypatch.setattr(wd, "read_cash", lambda f: f.get("cash", (None, "none")))
 
 
 GAME = {}
@@ -113,3 +114,62 @@ def test_gameplay_with_a_couple_of_words_is_not_a_menu():
     world = {"center": ["SwampBewdy", "Gas"]}
     ev = run([(GAME, 2), (DOWN, 4), (world, 8)])
     assert kinds(ev) == ["downed", "revived"]
+
+
+# ---- money readout -------------------------------------------------------------------------------------------
+# OCR words are (text, x, y) as fractions of the top-right "cash" region.
+
+def balance(words):
+    return wd.classify_cash(*wd.parse_cash(words))
+
+
+@pytest.mark.parametrize("words, expected", [
+    ([("$47,396", 0.62, 0.5), ("$200,699", 0.86, 0.5)], (200699, "pair")),              # match: delta + balance
+    ([("$200,699", 0.86, 0.5)], (200699, "right")),                                      # balance alone, right side
+    ([("$200,699", 0.61, 0.5), ("140", 0.84, 0.5)], (200699, "menu")),                   # lobby: balance + level
+    ([("$200,699", 0.30, 0.5), ("12", 0.55, 0.5), ("140", 0.84, 0.5)], (200699, "menu")),  # store: balance + counts
+    ([("$", 0.80, 0.5), ("200,699", 0.86, 0.5)], (200699, "right")),                     # "$" split off
+    ([("$200,", 0.84, 0.5), ("699", 0.88, 0.5)], (200699, "right")),                     # split after the comma
+    ([("$200,699", 0.86, 0.4), ("+$160", 0.70, 0.9)], (200699, "right")),                # popup below the header row
+], ids=["pair", "right", "lobby", "store", "split-dollar", "split-comma", "popup"])
+def test_cash_reads_the_balance(words, expected):
+    assert balance(words) == expected
+
+
+@pytest.mark.parametrize("words", [
+    [("$47,396", 0.62, 0.5)],                          # balance missed: the delta alone must not be taken
+    [("$47,396", 0.62, 0.5), ("559,647", 0.86, 0.5)],  # "$159,647" with its "$1" read as "5"
+    [("$200,699", 0.60, 0.5), ("-$1,200", 0.86, 0.5)],  # right-most amount is signed
+    [],
+], ids=["delta-only", "dollar-misread", "signed", "nothing"])
+def test_cash_rejects_ambiguous_reads(words):
+    assert balance(words)[0] is None
+
+
+def test_looks_chopped():
+    assert wd.looks_chopped(56142, 6142)        # leading "5" lost
+    assert not wd.looks_chopped(56142, 54000)   # same length: an ordinary purchase
+    assert not wd.looks_chopped(200699, 150000)
+
+
+def cash(v, how="pair"):
+    return {"cash": (v, how)}
+
+
+def test_cash_first_reading_needs_two_checks():
+    assert kinds(run([(cash(200699), 1)])) == []          # one check only
+    assert kinds(run([(cash(200699), 4)])) == [("cash", 200699)]
+
+
+def test_cash_small_change_accepted_quickly():
+    ev = kinds(run([(cash(100000), 4), (cash(104000), 4)]))
+    assert ev == [("cash", 100000), ("cash", 104000)]
+
+
+def test_cash_big_jump_needs_four_checks():
+    assert kinds(run([(cash(100000), 4), (cash(180000), 5)])) == [("cash", 100000)]
+    assert kinds(run([(cash(100000), 4), (cash(180000), 7)])) == [("cash", 100000), ("cash", 180000)]
+
+
+def test_cash_chopped_reading_is_held_back():
+    assert kinds(run([(cash(56142), 4), (cash(6142), 20)])) == [("cash", 56142)]

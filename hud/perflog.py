@@ -22,34 +22,50 @@ def system_times():
     return _ft(i), _ft(k) + _ft(u)
 
 
+# Oct 18: these used to spawn nvidia-smi (~170 ms) and a whole PowerShell (~1.8 s of CPU) every 2 s while the game
+# ran. Now both are read in-process: NVML through pynvml (opened once) and per-app CPU through psutil.
+_NVML = {"h": None, "failed_at": 0.0}
+
+
 def gpu_stats():
     try:
-        out = subprocess.run(["nvidia-smi", "--query-gpu=utilization.gpu,utilization.encoder,clocks.gr,power.draw",
-                              "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=5,
-                             creationflags=0x08000000).stdout.strip()
-        return [x.strip() for x in out.split(",")]
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            import pynvml
+        if _NVML["h"] is None:
+            if time.time() - _NVML["failed_at"] < 60:
+                return ["", "", "", ""]
+            pynvml.nvmlInit()
+            _NVML["h"] = pynvml.nvmlDeviceGetHandleByIndex(0)
+        h = _NVML["h"]
+        util = pynvml.nvmlDeviceGetUtilizationRates(h).gpu
+        enc = pynvml.nvmlDeviceGetEncoderUtilization(h)[0]
+        clk = pynvml.nvmlDeviceGetClockInfo(h, pynvml.NVML_CLOCK_GRAPHICS)
+        pw = pynvml.nvmlDeviceGetPowerUsage(h) / 1000.0
+        return [str(util), str(enc), str(clk), f"{pw:.2f}"]
     except Exception:
+        _NVML["h"], _NVML["failed_at"] = None, time.time()
         return ["", "", "", ""]
 
 
 def app_cpu():
-    """Per-app CPU seconds via PowerShell-free WMIC-less route: use tasklist is too coarse, so read via psutil-like ctypes is long;
-    use 'typeperf' style query through PowerShell once per sample (cheap enough every 2 s)."""
+    """Per-app CPU seconds (user + kernel, like Get-Process 'CPU'), in-process via psutil."""
+    tot = {k: 0.0 for k in APPS}
     try:
-        ps = ("Get-Process | Select-Object ProcessName,CPU | ConvertTo-Csv -NoTypeInformation")
-        out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=8,
-                             creationflags=0x08000000).stdout
-        tot = {k: 0.0 for k in APPS}
-        for row in csv.reader(out.splitlines()[1:]):
-            if len(row) < 2 or not row[1]:
-                continue
-            name = row[0].lower()
+        import psutil
+        for p in psutil.process_iter(["name"]):
+            name = (p.info.get("name") or "").lower()
             for k, pat in APPS.items():
                 if name.startswith(pat):
-                    tot[k] += float(row[1])
-        return tot
+                    try:
+                        ct = p.cpu_times()
+                        tot[k] += ct.user + ct.system
+                    except psutil.Error:
+                        pass
     except Exception:
-        return {k: 0.0 for k in APPS}
+        pass
+    return tot
 
 
 def read_fps(frame, wd):

@@ -105,6 +105,18 @@ class GameBoost(threading.Thread):
                     k32.CloseHandle(h)
         self.saved.clear()
 
+    def _pin_self(self, on):
+        """Keep the HUD's own OCR work off the P-cores while the game runs (no EcoQoS: OCR must keep pace)."""
+        if not self.ecores or on == getattr(self, "self_pinned", False):
+            return
+        h = ctypes.c_void_p(k32.GetCurrentProcess())
+        cur_aff, sys_aff = ctypes.c_size_t(), ctypes.c_size_t()
+        k32.GetProcessAffinityMask(h, ctypes.byref(cur_aff), ctypes.byref(sys_aff))
+        k32.SetProcessAffinityMask(h, ctypes.c_size_t(self.ecores if on else sys_aff.value))
+        k32.SetPriorityClass(h, BELOW_NORMAL if on else NORMAL)
+        self.self_pinned = on
+        self.status["hud_on_ecores"] = on
+
     def run(self):
         while True:
             try:
@@ -117,12 +129,14 @@ class GameBoost(threading.Thread):
                             boosted += self._apply(name, pid, ABOVE_NORMAL, False)
                         elif name in BACKGROUND:
                             bg += self._apply(name, pid, BELOW_NORMAL, True)
+                    self._pin_self(True)
                     if not self.active:
                         print(time.strftime("%Y-%m-%d %H:%M:%S"), f"game boost ON: {boosted} boosted, {bg} background -> E-cores", flush=True)
                     self.active = True
                     self.status.update(active=True, boosted=boosted, background=bg)
                 elif self.active:
                     self._restore()
+                    self._pin_self(False)
                     self.active = False
                     self.status.update(active=False, boosted=0, background=0)
                     print(time.strftime("%Y-%m-%d %H:%M:%S"), "game boost OFF: restored", flush=True)

@@ -16,5 +16,6 @@
     "undo": "ctrl+alt+4",
     "reset": "ctrl+alt+0"
   },
-  "overlay_sounds": true
+  "overlay_sounds": true,
+  "overlay_theme": "protocol"
 }

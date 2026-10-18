@@ -81,6 +81,7 @@ def fresh():
     now = time.time()
     return {"kills": 0, "deaths": 0, "wins": 0, "streak": 0, "best_streak": 0,
             "multi": 0, "last_kill_ts": 0, "last_event_ts": 0,
+            "cash_start": None, "cash_now": None, "cash_earned": 0,
             "session_started": now, "session_id": int(now)}
 
 
@@ -114,6 +115,8 @@ def build_id():
 def public():
     s = dict(STATE)
     s["kd"] = round(s["kills"] / max(1, s["deaths"]), 2)
+    # "Debt paid" = money earned this stream: every increase in the balance counts, purchases don't take it back
+    s["cash_delta"] = int(s.get("cash_earned") or 0) if s.get("cash_now") is not None else None
     return s
 
 
@@ -137,6 +140,47 @@ def do_reset(auto=False):
     STATE.update(fresh())
     save()
     broadcast({"type": "reset", "auto": auto, "state": public()})
+
+
+THEMES = ["protocol", "fieldkit", "nvg", "stencil", "killfeed"]
+CASH_MAX_STEP = 150_000  # a single balance jump bigger than this is treated as a misread, not income
+CASH_DIP_MIN = 20_000     # drops at least this big are remembered for ...
+CASH_DIP_WINDOW_S = 240   # ... 4 minutes, in case the old balance comes back (then the drop was a misread)
+
+
+def apply_cash(balance):
+    """In-game balance reading. Increases add to this stream's earnings; spending lowers the balance only."""
+    with LOCK:
+        now = time.time()
+        gap = float(CFG.get("new_session_after_hours", 4)) * 3600
+        if gap > 0 and STATE["last_event_ts"] and now - STATE["last_event_ts"] > gap:
+            do_reset(auto=True)
+        STATE["last_event_ts"] = now
+        if STATE.get("cash_start") is None:
+            STATE["cash_start"] = balance
+        prev = STATE.get("cash_now")
+        if prev == balance:
+            return public()
+        # A big drop that comes back to (about) the old level within a few minutes was a misread, not spending:
+        # only what ends up ABOVE the old level counts as income (Oct 18 fix; misreads inflated Oct 15/16 by ~100k each).
+        dip = STATE.get("cash_dip")
+        if dip and now - dip[1] > CASH_DIP_WINDOW_S:
+            dip = None
+        gain = balance - prev if prev is not None else 0
+        if prev is not None and -gain >= CASH_DIP_MIN and not dip:
+            dip = [prev, now]
+        elif gain > 0 and dip and dip[0] - 2_000 <= balance <= dip[0] + 15_000:
+            print(f"cash: {dip[0]} -> {prev} -> {balance} looks like a misread dip; counting {max(0, balance - dip[0])}",
+                  flush=True)
+            gain = max(0, balance - dip[0])
+            dip = None
+        if 0 < gain <= CASH_MAX_STEP:
+            STATE["cash_earned"] = int(STATE.get("cash_earned") or 0) + gain
+        STATE["cash_dip"] = dip
+        STATE["cash_now"] = balance
+        save()
+        broadcast({"type": "cash", "state": public()})
+        return public()
 
 
 def apply(kind):
@@ -281,11 +325,27 @@ class Handler(BaseHTTPRequestHandler):
                 n = 1
             s = public()
             s.update({"multi": n, "streak": n})
+            if kind == "cash":
+                s["cash_delta"] = (s.get("cash_delta") or 0) + n
             evt = {"type": kind, "test": True, "state": s}
             if kind == "death":
                 evt["ended_streak"] = n
             broadcast(evt)
             return self._send(200, '{"ok":true,"test":true}')
+        if p.startswith("/api/theme"):
+            # /api/theme/<name> -- switch every overlay without touching the Streamlabs URL
+            name = p.rsplit("/", 1)[-1]
+            if name in THEMES:
+                CFG["overlay_theme"] = name
+                save_cfg()
+                broadcast({"type": "theme", "name": name})
+            return self._send(200, json.dumps({"theme": CFG.get("overlay_theme", "protocol"), "themes": THEMES}))
+        if p.startswith("/api/cash/"):
+            # /api/cash/<balance> -- feed a balance by hand (testing, or a manual correction)
+            try:
+                return self._send(200, json.dumps(apply_cash(int(p.rsplit("/", 1)[-1].replace(",", "")))))
+            except ValueError:
+                return self._send(400, '{"error":"balance must be a number"}')
         if p.startswith("/api/"):
             kind = p.rsplit("/", 1)[-1]
             if kind in ("kill", "death", "win", "undo", "reset"):
@@ -303,7 +363,8 @@ class Handler(BaseHTTPRequestHandler):
         CLIENTS.add(q)
         try:
             hello = json.dumps({"type": "hello", "build": build_id(), "state": public(),
-                                "overlay_sounds": bool(CFG.get("overlay_sounds", True))})
+                                "overlay_sounds": bool(CFG.get("overlay_sounds", True)),
+                                "theme": CFG.get("overlay_theme", "protocol")})
             self.wfile.write(("retry: 1500\ndata: " + hello + "\n\n").encode("utf-8"))
             self.wfile.flush()
             while True:
@@ -388,7 +449,9 @@ if __name__ == "__main__":
     if CFG.get("auto_detect") and sys.platform == "win32":
         from autodetect import AutoDetect
         def emit(ev):
-            if ev in ("kill", "death", "win"):
+            if isinstance(ev, tuple) and ev[0] == "cash":
+                apply_cash(ev[1])
+            elif ev in ("kill", "death", "win"):
                 apply(ev)
             else:
                 broadcast({"type": ev, "state": public()})

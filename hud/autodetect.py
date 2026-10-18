@@ -32,6 +32,69 @@ def window_rect(hwnd):
     return {"left": r.left, "top": r.top, "width": r.right - r.left, "height": r.bottom - r.top}
 
 
+class NpFrame:
+    """Lazy RGB view over a BGRA screen grab: only the regions the detector actually crops get converted
+    (the old path converted the whole 3440x1440 frame to RGB every tick)."""
+
+    def __init__(self, bgra):
+        self.a = bgra
+        self.size = (bgra.shape[1], bgra.shape[0])
+
+    def crop(self, box):
+        import numpy as np
+        from PIL import Image
+        l, t, r, b = (int(v) for v in box)
+        return Image.fromarray(np.ascontiguousarray(self.a[t:b, l:r, 2::-1]), "RGB")
+
+
+class Capture:
+    """Screen capture for the detector. Oct 18: Desktop Duplication (dxcam) instead of a GDI BitBlt of the whole
+    game window - the GDI grab took ~77 ms (up to 142 ms) four times a second and stalls the compositor (hitches);
+    dxcam takes ~14 ms. Falls back to the old mss/GDI grab if Desktop Duplication isn't available."""
+
+    def __init__(self):
+        self.cam, self.last, self.retry_at = None, None, 0.0
+        self.gdi = None
+        self._open()
+
+    def _open(self):
+        try:
+            import dxcam
+            self.cam = dxcam.create(device_idx=0, output_idx=0, output_color="BGRA")
+            self.out = (self.cam.width, self.cam.height)
+        except Exception as e:
+            self.cam = None
+            self.retry_at = time.time() + 30
+            print("capture: Desktop Duplication unavailable, using GDI for now:", e, flush=True)
+
+    def grab(self, rect):
+        l, t = rect["left"], rect["top"]
+        r, b = l + rect["width"], t + rect["height"]
+        if self.cam is None and time.time() >= self.retry_at:
+            self._open()
+        if self.cam is not None and l >= 0 and t >= 0 and r <= self.out[0] and b <= self.out[1]:
+            try:
+                f = self.cam.grab(region=(l, t, r, b))
+                if f is None and self.last is not None and self.last.shape[:2] == (b - t, r - l):
+                    f = self.last  # no new frame since the last grab (screen unchanged)
+                if f is not None:
+                    self.last = f
+                    return NpFrame(f)
+            except Exception as e:
+                print("capture: Desktop Duplication error, falling back to GDI:", e, flush=True)
+                try:
+                    self.cam.release()
+                except Exception:
+                    pass
+                self.cam, self.retry_at = None, time.time() + 10
+        import mss
+        from PIL import Image
+        if self.gdi is None:
+            self.gdi = (getattr(mss, "MSS", None) or mss.mss)()
+        shot = self.gdi.grab(rect)
+        return Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
+
+
 class AutoDetect(threading.Thread):
     def __init__(self, emit, game_exe="WardogsClient-Win64-Shipping.exe", fps=4.0, enabled=True):
         super().__init__(daemon=True)
@@ -44,13 +107,11 @@ class AutoDetect(threading.Thread):
 
     def run(self):
         try:
-            import mss
-            from PIL import Image
             import wardogs_detect as wd
         except Exception as e:
             self.status["error"] = f"auto-detect unavailable: {e}"
             return
-        grabber = (getattr(mss, "MSS", None) or mss.mss)()
+        grabber = Capture()
         det = wd.Detector()
         try:
             from perflog import PerfLog
@@ -77,12 +138,16 @@ class AutoDetect(threading.Thread):
                 if rect["width"] < 640 or rect["height"] < 360:
                     time.sleep(0.5)
                     continue
-                shot = grabber.grab(rect)
-                frame = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
+                frame = grabber.grab(rect)
                 events, _dbg = det.feed(frame, t0)
                 if perf:
                     perf.maybe_log(frame, wd)
                 for ev in events:
+                    if isinstance(ev, tuple):  # ("cash", balance)
+                        self.status[ev[0]] = ev[1]
+                        print(time.strftime("%Y-%m-%d %H:%M:%S"), "auto:", ev[0], ev[1], flush=True)
+                        self.emit(ev)
+                        continue
                     if ev + "s" in self.status:
                         self.status[ev + "s"] += 1
                     self.status["last_event"] = [ev, time.strftime("%H:%M:%S")]

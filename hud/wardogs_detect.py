@@ -6,6 +6,10 @@ Signals (calibrated on Wardogs highlight clips, 3440x1440 borderless):
   downed / revived -> "GIVE UP / CALL FOR HELP" prompt appears / clears without a respawn (info only, not counted).
                       A menu/inventory/map hiding the prompt, or the game losing focus, is NOT a revive.
   win   -> end-of-match scoreboard headed "VICTORY" (DEFEAT and "<TEAM> WINS" splashes are ignored)
+  cash  -> account balance from the top-right money readout ("$47,396  $200,699  140" = the game's own session
+           delta, balance, level). The balance is the RIGHT-MOST $ amount of that header row (Oct 18; it used to be
+           the largest, which picked up the session delta whenever OCR missed the balance). It updates live in
+           matches and menus. The server adds up the increases as "debt paid" for the stream.
 """
 import asyncio, re, time
 from PIL import Image, ImageOps
@@ -21,6 +25,7 @@ REGIONS = {
     "win": (0.28, 0.06, 0.72, 0.36),  # big VICTORY / DEFEAT header
     "respawn": (0.30, 0.36, 0.70, 0.58),  # "RESPAWNING IN 5..." on black
     "damagelog": (0.86, 0.60, 1.00, 0.78),  # "VIEW DAMAGE LOG": on screen for the whole down, even mid-revive
+    "cash": (0.82, 0.00, 1.00, 0.075),  # money readout in the top-right header
 }
 
 # OCR is noisy on thin HUD text, so match loosely.
@@ -28,6 +33,7 @@ RE_CONFIRM = re.compile(r"(C[O0C]N?F[I1lL|]R|NF[I1lL|]R[MHN]|[KR][I1lL|]{1,3}[\s
 RE_WIN = re.compile(r"V[I1l|]CT[O0]RY", re.I)
 RE_RESPAWN = re.compile(r"RESP[A4]WN|SP[A4]WNING\s*IN|DEPL[O0]YMENT\s*B[O0]ARD", re.I)
 RE_DAMAGELOG = re.compile(r"DAMAGE\s*L[O0]G|V[I1l]EW\s*DAMAGE", re.I)
+RE_CASH = re.compile(r"(-?)\s?\$\s?(\d{1,3}(?:,\d{3})+)")
 RE_DOWNED = re.compile(r"G[I1l]VE\s*U|F[O0]R\s*HEL|CALL\s*F[O0]R", re.I)
 # Full-screen UI (inventory, map, pause/settings, scoreboard) that can hide the downed prompt.
 RE_MENU = re.compile(r"INVENT[O0]RY|BACKPACK|L[O0]AD[O0]UT|EQUIP|SETTINGS|[O0]PTI[O0]NS|RESUME|SC[O0]REB[O0]ARD"
@@ -92,6 +98,103 @@ def downed_cues(frame):
     return False, ""
 
 
+# ---- money readout (rewritten Oct 18) ----
+# Header layouts:   [session delta][arrow] [BALANCE]                      in a match
+#                   [session delta][arrow] [BALANCE] [skull][level]       lobby
+#                   [BALANCE] [icon] [gold] n [skull][level]              store / other menus
+# The old reader took the LARGEST unsigned amount, so when OCR missed the balance (the "$1" of "$159,647" often
+# reads as "5") it reported the session delta instead -> fake dips, and the real balance coming back counted as
+# ~100k of "income". Now the balance is the RIGHT-MOST $ amount of the header row; a lone amount is only taken when
+# its position says it is the balance.
+RE_CASH_AMT = re.compile(r"([+-]?)([$S])(\d{1,3}(?:,\d{3})*)(,?)(?!\d)")
+RE_CASH_TAIL = re.compile(r"^\d{3}(?:,\d{3})*$")
+RE_PLAIN_NUM = re.compile(r"^\d{1,3}$")
+CASH_HEADER_MAX_Y = 0.78   # popups ("CONTROL ZONE PRESENCE +$160") sit lower in the region
+CASH_BALANCE_X = 0.76      # match layout: balance centre ~0.86 of the region width, delta ~0.60-0.65
+CASH_MENU_X = 0.52         # lobby layout: delta ~0.41, balance ~0.61, level ~0.84
+
+
+def ocr_words(img):
+    """[(text, x_centre, y_centre)] as fractions of the image, in OCR reading order."""
+    img = img.convert("RGBA")
+    w, h = img.size
+    dw = DataWriter()
+    dw.write_bytes(img.tobytes())
+    sb = SoftwareBitmap.create_copy_from_buffer(dw.detach_buffer(), BitmapPixelFormat.BGRA8, w, h)
+    res = _loop.run_until_complete(_engine.recognize_async(sb))
+    out = []
+    for ln in res.lines:
+        for word in ln.words:
+            r = word.bounding_rect
+            out.append((word.text, (r.x + r.width / 2) / w, (r.y + r.height / 2) / h))
+    return out
+
+
+def parse_cash(words):
+    """-> (amounts, plains). amounts: [(x, sign, value, grouped)] left->right; plains: x of $-less 1-3 digit numbers
+    (level, counts). '$' / '-$' tokens are joined to the next token, '$18,' + '194' is joined, junk around a token
+    ("$47,047+", "?$78,614", "$5,849k") is ignored."""
+    row = [(t.replace(" ", ""), x) for t, x, y in words if y <= CASH_HEADER_MAX_Y]
+    amounts, plains, i = [], [], 0
+    while i < len(row):
+        t, x = row[i]
+        if t in ("$", "-$", "-", "S", "-S") and i + 1 < len(row):
+            t, x = t + row[i + 1][0], row[i + 1][1]
+            i += 1
+        m = RE_CASH_AMT.search(t)
+        if m and m.group(4) and i + 1 < len(row) and RE_CASH_TAIL.match(row[i + 1][0]):
+            t = t[:m.end()] + row[i + 1][0]
+            i += 1
+            m = RE_CASH_AMT.search(t)
+        if m:
+            sign, cur, digits, _ = m.groups()
+            grouped = "," in digits
+            if cur == "$" or grouped:  # 'S' only stands in for '$' before a grouped number
+                amounts.append((x, sign, int(digits.replace(",", "")), grouped))
+        elif RE_PLAIN_NUM.match(t):
+            plains.append(x)
+        i += 1
+    return sorted(amounts), plains
+
+
+def classify_cash(amounts, plains):
+    """Balance from one OCR pass -> (value or None, how)."""
+    if not amounts:
+        return None, "none"
+    x, sign, v, grouped = amounts[-1]
+    if sign or not grouped:
+        return None, "rightmost is the delta/partial"
+    if len(amounts) >= 2:
+        return v, "pair"
+    if x >= CASH_BALANCE_X:
+        return v, "right"
+    right_plains = sum(1 for p in plains if p > x + 0.1)
+    if (x >= CASH_MENU_X and right_plains >= 1) or (x >= 0.25 and right_plains >= 2):
+        return v, "menu"
+    return None, "lone amount in the delta position"
+
+
+def read_cash(frame):
+    """Account balance from the top-right header -> (value, how) or (None, why). Two of three OCR passes must agree."""
+    c = region(frame, "cash")
+    vals, hows = [], []
+    for fn in (v_gray, v_inv, v_thr):
+        v, how = classify_cash(*parse_cash(ocr_words(fn(c))))
+        if v is not None:
+            vals.append(v)
+            hows.append(how)
+    for v, how in zip(vals, hows):
+        if vals.count(v) >= 2:
+            return v, how
+    return None, "no agreement"
+
+
+def looks_chopped(cur, v, tol=3_000):
+    """v is cur with its leading digit(s) lost ("$56,142" read as "$6,142"): not a purchase."""
+    k = len(str(v))
+    return v < cur and cur >= 10 ** k and abs(v - cur % 10 ** k) <= tol
+
+
 def is_occluded(frame):
     """True when a full-screen menu/inventory/map covers the HUD. The 3D world yields almost no OCR words;
     menus yield many lines or a known menu keyword. Only called while downed, so its cost is bounded."""
@@ -135,6 +238,21 @@ class Detector:
         self.last_feed_ts = None
         self.last_occl_check = -1e9
         self.occluded = False
+        self.last_cash_check = -1e9
+        self.cash = None          # last accepted balance
+        self.cash_cand = None     # candidate reading and how many checks in a row agreed
+        self.cash_cand_n = 0
+
+    def cash_needed(self, v, how):
+        """Checks in a row a new balance reading needs before it is accepted."""
+        if self.cash is None:
+            return 3 if how == "menu" else 2
+        d = abs(v - self.cash)
+        if looks_chopped(self.cash, v):
+            return 30
+        if d > 50_000 or (how == "menu" and d > 20_000):
+            return 4
+        return 2
 
     def feed(self, frame, ts=None):
         ts = time.time() if ts is None else ts
@@ -201,6 +319,20 @@ class Detector:
                     self.downed_active = False
             else:
                 self.respawn_hits = 0
+        # ---- cash: balance readout, checked every 2 s. A new value must read the same several checks in a row
+        #      before it counts: 2 normally, 4 for a move over $50k (or a lobby reading moving over $20k),
+        #      30 (~1 min) when it looks like the old balance with its leading digit lost ----
+        if ts - self.last_cash_check >= 2.0:
+            self.last_cash_check = ts
+            v, how = read_cash(frame)
+            if v is not None:
+                if v == self.cash_cand:
+                    self.cash_cand_n += 1
+                else:
+                    self.cash_cand, self.cash_cand_n = v, 1
+                if v != self.cash and self.cash_cand_n >= self.cash_needed(v, how):
+                    self.cash = v
+                    events.append(("cash", v))
         # ---- revived: ALL downed UI gone for 6 s of visible gameplay (tolerates white-flash / blur frames,
         #      menus, alt-tab) and no respawn countdown ----
         if self.downed_active and not down and ts - self.last_downed_ts > self.REVIVE_CLEAR_S \

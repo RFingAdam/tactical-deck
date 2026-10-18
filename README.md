@@ -113,7 +113,7 @@ Every button is a plain HTTP call, so a phone, a tablet or a Raspberry Pi touchs
 <td width="50%" valign="top">
 
 ### 🎯 Protocol HUD: a kill counter that counts itself
-A Kills / Deaths / Wins bar for your letterbox, with streak callouts (**LETHAL → RELENTLESS → UNTOUCHABLE → APEX**), a K.I.A. glitch and a victory screen. It reads the game's own kill feed with Windows' built-in OCR: **pixels only, never game memory or files**, so it's anti-cheat-safe by design. Hotkeys and HTTP overrides cover anything it misses.
+A Kills / Deaths / Wins bar for your letterbox, with streak callouts (**LETHAL → RELENTLESS → UNTOUCHABLE → APEX**), a K.I.A. glitch and a victory screen. It reads the game's own kill feed with Windows' built-in OCR: **pixels only, never game memory or files**, so it's anti-cheat-safe by design. Hotkeys and HTTP overrides cover anything it misses. It also keeps a **DEBT PAID** tally of the money you earn on stream, and comes in five themes.
 
 </td>
 </tr>
@@ -231,14 +231,14 @@ synth/          tactical_pack.py renders the 24-clip pack from code (CC BY 4.0)
 hud/            Protocol HUD overlay + OCR auto-detect (+ tools/ calibration kit)
 integrations/   companion/ page installer · haven/ pack installer
 sounds/         rendered packs land here (WAVs are git-ignored)
-tests/          Director logic + loudness spec, runs on Linux and Windows CI
+tests/          Director logic, loudness spec, HUD detector + DEBT PAID; runs on Linux and Windows CI
 ```
 
 ## ❓ FAQ
 
 <details><summary><b>Will the HUD get me banned?</b></summary>
 
-It takes ordinary screenshots of the focused window and runs Windows' own OCR on them, which is the same thing a screen recorder does. It never opens the game process, reads memory or touches game files. Still check your game's rules; the author doesn't speak for any anti-cheat vendor.
+It captures the screen the same way OBS display capture does (Windows Desktop Duplication) and runs Windows' own OCR on the parts it needs. It never opens the game process, reads memory or touches game files. Still check your game's rules; the author doesn't speak for any anti-cheat vendor.
 </details>
 
 <details><summary><b>Do I need a Stream Deck?</b></summary>

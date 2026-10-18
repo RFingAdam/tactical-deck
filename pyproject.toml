@@ -1,6 +1,6 @@
 [project]
 name = "tactical-deck"
-version = "1.1.0"
+version = "1.2.0"
 description = "Cinematic, game-reactive soundboard for streamers: synthesized tactical SFX pack (CC BY 4.0), one-button combos, auto-ducking, and an OCR kill-feed HUD."
 readme = "README.md"
 license = { text = "MIT" }

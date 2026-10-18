@@ -1,7 +1,10 @@
 # Protocol HUD (Windows only: uses the built-in Windows OCR engine)
-mss>=9
+mss>=9                # fallback screen capture (GDI) if Desktop Duplication isn't available
+dxcam>=0.3            # screen capture via Desktop Duplication (low-impact, no compositor stalls)
 pillow>=10
 numpy>=1.26
+psutil>=5.9           # per-app CPU in the perf log
+nvidia-ml-py>=12      # GPU load/clock/encoder in the perf log (NVIDIA only; skipped quietly otherwise)
 winrt-runtime>=3
 winrt-Windows.Foundation>=3
 winrt-Windows.Foundation.Collections>=3
