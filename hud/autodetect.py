@@ -114,6 +114,12 @@ class AutoDetect(threading.Thread):
         grabber = Capture()
         det = wd.Detector()
         try:
+            from server_watch import ServerWatch   # Wardogs server ID -> Stream Keeper (rejoin after a crash)
+            watch = ServerWatch()
+        except Exception as e:
+            watch = None
+            print('server watch disabled:', e)
+        try:
             from perflog import PerfLog
             perf = PerfLog()
         except Exception as e:
@@ -142,16 +148,25 @@ class AutoDetect(threading.Thread):
                 events, _dbg = det.feed(frame, t0)
                 if perf:
                     perf.maybe_log(frame, wd)
+                if watch:
+                    try:
+                        sid = watch.feed(frame, t0)
+                        if sid:
+                            self.status["server"] = sid
+                    except Exception as e:  # never let it break kill/death detection
+                        print('server watch error:', e)
                 for ev in events:
-                    if isinstance(ev, tuple):  # ("cash", balance)
+                    if isinstance(ev, tuple):  # ("cash", balance) or ("cash", balance, how)
                         self.status[ev[0]] = ev[1]
-                        print(time.strftime("%Y-%m-%d %H:%M:%S"), "auto:", ev[0], ev[1], flush=True)
+                        extra = f" how={ev[2]}" if len(ev) >= 3 else ""
+                        print(time.strftime("%Y-%m-%d %H:%M:%S"), "auto:", ev[0], ev[1], extra, flush=True)
                         self.emit(ev)
                         continue
                     if ev + "s" in self.status:
                         self.status[ev + "s"] += 1
                     self.status["last_event"] = [ev, time.strftime("%H:%M:%S")]
-                    print(time.strftime("%Y-%m-%d %H:%M:%S"), "auto:", ev, "| downed-ui:", (_dbg.get("downed") or "")[:40], flush=True)
+                    print(time.strftime("%Y-%m-%d %H:%M:%S"), "auto:", ev, "| downed-ui:", (_dbg.get("downed") or "")[:40],
+                          ("| death-text: " + (_dbg.get("death_text") or "")) if ev == "death" else "", flush=True)
                     self.emit(ev)
                 frames += 1
                 if time.time() - t_rate >= 5:

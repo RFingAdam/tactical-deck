@@ -60,7 +60,8 @@ kbd{background:#0f1218;border:1px solid var(--line);padding:1px 6px;font-family:
         <div class="stat d"><div class="l">DEATHS</div><div class="v" id="d">0</div></div>
         <div class="stat w"><div class="l">WINS</div><div class="v" id="w">0</div></div>
       </div>
-      <div class="meta"><span>K/D <b id="kd">0.00</b></span><span>STREAK <b id="s">0</b></span><span>BEST <b id="b">0</b></span><span>DEBT PAID <b id="cash" style="color:var(--cash)">$0</b></span></div>
+      <div class="meta"><span>K/D <b id="kd">0.00</b></span><span>STREAK <b id="s">0</b></span><span>BEST <b id="b">0</b></span><span>STREAM PROFIT <b id="cash" style="color:var(--cash)">$0</b></span></div>
+      <div class="meta" style="margin-top:6px"><span>INVESTED <b id="inv">$0</b></span><span>KITS <b id="kits">$0</b></span><span>RAW Δ <b id="rawd">—</b></span></div>
       <div class="big">
         <button class="k" data-a="kill">+ KILL</button>
         <button class="d" data-a="death">+ DEATH</button>
@@ -68,6 +69,9 @@ kbd{background:#0f1218;border:1px solid var(--line);padding:1px 6px;font-family:
       </div>
       <div class="row">
         <button data-a="undo">UNDO LAST</button>
+        <button id="start-session">START SESSION</button>
+        <button data-a="invest">MARK LAST DROP INVESTED</button>
+        <button id="invest-undo">UNDO INVEST</button>
         <button id="reset"><span class="fill"></span><span style="position:relative">HOLD TO RESET</span></button>
       </div>
     </div>
@@ -120,7 +124,7 @@ kbd{background:#0f1218;border:1px solid var(--line);padding:1px 6px;font-family:
       <div class="hint" style="margin-top:10px">Companion / Stream Deck buttons: HTTP GET to</div>
       <code class="u">/api/kill</code><code class="u">/api/death</code><code class="u">/api/win</code><code class="u">/api/undo</code>
       <div class="hint" style="margin-top:10px">Global hotkeys (work in-game): <kbd>Ctrl+Alt+1</kbd> kill · <kbd>Ctrl+Alt+2</kbd> death · <kbd>Ctrl+Alt+3</kbd> win · <kbd>Ctrl+Alt+4</kbd> undo · <kbd>Ctrl+Alt+0</kbd> twice = reset.<br>
-      Counters auto-zero on the first event after 4+ hours idle (i.e. your next stream). Change it in <b>config.json</b>.</div>
+      Idle auto-reset is off by default — use <b>Start session</b> at go-live so one-time unlocks stay invested. Hotkeys: <kbd>Ctrl+Alt+5</kbd> mark last drop invested · <kbd>Ctrl+Alt+6</kbd> undo invest.</div>
     </div>
   </section>
 </main>
@@ -133,10 +137,17 @@ function toast(t){const e=$("toast");e.textContent=t;e.classList.add("on");clear
 function render(s){$("k").textContent=s.kills;$("d").textContent=s.deaths;$("w").textContent=s.wins;
   $("kd").textContent=Number(s.kd||0).toFixed(2);$("s").textContent=s.streak;$("b").textContent=s.best_streak;
   $("sess").textContent="session since "+new Date(s.session_started*1000).toLocaleString();
-  const cd=s.cash_delta;$("cash").textContent=cd==null?"waiting for first reading":"$"+Number(cd).toLocaleString("en-US");}
+  const cd=s.cash_delta;$("cash").textContent=cd==null?"waiting for first reading / start session":(cd<0?"-$":"$")+Math.abs(Number(cd)).toLocaleString("en-US")+"  (earned $"+Number(s.cash_earned||0).toLocaleString("en-US")+", spent $"+Number(s.cash_spent||0).toLocaleString("en-US")+")";$("cash").style.color=cd!=null&&cd<0?"#ff6b6b":"var(--cash)";
+  $("inv").textContent="$"+Number(s.cash_invested||0).toLocaleString("en-US");
+  $("kits").textContent="$"+Number(s.cash_kits||0).toLocaleString("en-US");
+  const rd=s.cash_raw_delta;$("rawd").textContent=rd==null?"—":(rd<0?"-$":"$")+Math.abs(Number(rd)).toLocaleString("en-US");}
+
 function hit(path){return fetch(path,{method:"POST"}).then(r=>r.json()).then(s=>{if(s&&s.kills!==undefined)render(s)}).catch(()=>toast("server offline"))}
 document.querySelectorAll("[data-a]").forEach(b=>b.onclick=()=>hit("/api/"+b.dataset.a));
 document.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>fetch("/api/test/"+b.dataset.t,{method:"POST"}));
+$("start-session").onclick=()=>hit("/api/session/start").then(()=>toast("session baseline set"));
+$("invest-undo").onclick=()=>hit("/api/cash/invest/undo").then(()=>toast("invest undone"));
+
 function setUrl(){const u=`${base}/overlay${pos==="tl"?"":"?pos="+pos}`;$("ourl").textContent=u;$("pv").src="/overlay?mute=1"+(pos==="tl"?"":"&pos="+pos)}
 document.querySelectorAll("[data-pos]").forEach(b=>b.onclick=()=>{pos=b.dataset.pos;setUrl()});
 document.querySelectorAll("code.u").forEach(c=>c.textContent=base+c.textContent);

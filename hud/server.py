@@ -17,7 +17,7 @@ SOUND_DIR = os.path.join(ROOT, "sounds")
 DEFAULT_CFG = {
     "host": "127.0.0.1",
     "port": 8790,
-    "new_session_after_hours": 4,
+    "new_session_after_hours": 0,  # disabled: baseline only on go-live / Start session
     "multikill_window_sec": 8,
     "hotkeys_enabled": True,
     "auto_detect": True,
@@ -31,6 +31,8 @@ DEFAULT_CFG = {
         "win": "ctrl+alt+3",
         "undo": "ctrl+alt+4",
         "reset": "ctrl+alt+0",
+        "invest": "ctrl+alt+5",
+        "invest_undo": "ctrl+alt+6",
     },
 }
 
@@ -80,8 +82,10 @@ def save_cfg():
 def fresh():
     now = time.time()
     return {"kills": 0, "deaths": 0, "wins": 0, "streak": 0, "best_streak": 0,
-            "multi": 0, "last_kill_ts": 0, "last_event_ts": 0,
+            "multi": 0, "last_kill_ts": 0, "last_death_ts": 0, "last_event_ts": 0,
             "cash_start": None, "cash_now": None, "cash_earned": 0,
+            "cash_invested": 0, "cash_kits": 0, "cash_session_started": False,
+            "cash_last_drop": None,  # {amount, ts, classified}
             "session_started": now, "session_id": int(now)}
 
 
@@ -115,8 +119,20 @@ def build_id():
 def public():
     s = dict(STATE)
     s["kd"] = round(s["kills"] / max(1, s["deaths"]), 2)
-    # "Debt paid" = money earned this stream: every increase in the balance counts, purchases don't take it back
-    s["cash_delta"] = int(s.get("cash_earned") or 0) if s.get("cash_now") is not None else None
+    # STREAM PROFIT = (cash_now - cash_start) + cash_invested
+    # One-time unlocks/buys are invested (not losses). Per-life kits stay as costs.
+    if s.get("cash_now") is not None and s.get("cash_start") is not None:
+        raw = int(s["cash_now"]) - int(s["cash_start"])
+        invested = int(s.get("cash_invested") or 0)
+        s["cash_delta"] = raw + invested
+        s["cash_raw_delta"] = raw
+        s["cash_invested"] = invested
+        s["cash_kits"] = int(s.get("cash_kits") or 0)
+        # kits + other non-invest drops counted as spend
+        s["cash_spent"] = max(0, int(s.get("cash_earned") or 0) - s["cash_delta"])
+    else:
+        s["cash_delta"] = None
+        s["cash_raw_delta"] = None
     return s
 
 
@@ -146,27 +162,144 @@ THEMES = ["protocol", "fieldkit", "nvg", "stencil", "killfeed"]
 CASH_MAX_STEP = 150_000  # a single balance jump bigger than this is treated as a misread, not income
 CASH_DIP_MIN = 20_000     # drops at least this big are remembered for ...
 CASH_DIP_WINDOW_S = 240   # ... 4 minutes, in case the old balance comes back (then the drop was a misread)
+CASH_SPIKE_WINDOW_S = 240  # spike-then-drop misread mirror of dip-then-recover
+CASH_INVEST_MIN = 5_000    # drops below this are never one-time unlocks
+CASH_KIT_WINDOW_S = 60     # drops within this after death/respawn stay as kit costs
+CASH_ROUND_MOD = 1_000     # "round number" unlock amounts
 
 
-def apply_cash(balance):
-    """In-game balance reading. Increases add to this stream's earnings; spending lowers the balance only."""
+def is_round_amount(amount):
+    """True when amount looks like a store unlock price (round thousands)."""
+    a = abs(int(amount))
+    return a >= CASH_INVEST_MIN and a % CASH_ROUND_MOD == 0
+
+
+def classify_drop(amount, *, how=None, now=None, last_death_ts=0, kit_window_s=CASH_KIT_WINDOW_S):
+    """Classify a balance drop as investment (one-time unlock/buy) or kit/cost.
+
+    Investment when ALL hold:
+      - amount >= $5K
+      - NOT within ~60s after death/respawn
+      - menu reading OR round amount
+    Per-life kits (~$16K respawns) stay costs via the death window.
+    """
+    amt = abs(int(amount))
+    now = time.time() if now is None else float(now)
+    if amt < CASH_INVEST_MIN:
+        return "kit" if amt > 0 else "none"
+    if last_death_ts and (now - float(last_death_ts)) <= float(kit_window_s):
+        return "kit"
+    menu = (how or "") == "menu"
+    if menu or is_round_amount(amt):
+        return "invest"
+    return "kit"
+
+
+def start_cash_session(balance=None):
+    """Explicit session baseline (go-live / Start session). Clears invest counters."""
     with LOCK:
         now = time.time()
-        gap = float(CFG.get("new_session_after_hours", 4)) * 3600
+        bal = balance if balance is not None else STATE.get("cash_now")
+        STATE["cash_start"] = bal
+        STATE["cash_now"] = bal
+        STATE["cash_earned"] = 0
+        STATE["cash_invested"] = 0
+        STATE["cash_kits"] = 0
+        STATE["cash_last_drop"] = None
+        STATE["cash_dip"] = None
+        STATE["cash_spike"] = None
+        STATE["cash_session_started"] = True
+        STATE["session_started"] = now
+        STATE["last_event_ts"] = now
+        save()
+        broadcast({"type": "cash", "state": public()})
+        return public()
+
+
+def mark_last_drop_invested():
+    """Manual override: move the last non-invest drop into cash_invested."""
+    with LOCK:
+        drop = STATE.get("cash_last_drop")
+        if not drop or drop.get("classified") == "invest":
+            return public()
+        amt = int(drop.get("amount") or 0)
+        if amt <= 0:
+            return public()
+        _push_history()
+        if drop.get("classified") == "kit":
+            STATE["cash_kits"] = max(0, int(STATE.get("cash_kits") or 0) - amt)
+        STATE["cash_invested"] = int(STATE.get("cash_invested") or 0) + amt
+        drop = dict(drop)
+        drop["classified"] = "invest"
+        drop["manual"] = True
+        STATE["cash_last_drop"] = drop
+        save()
+        broadcast({"type": "cash", "state": public()})
+        return public()
+
+
+def undo_last_invest():
+    """Undo the last manual (or auto) invest classification on the last drop."""
+    with LOCK:
+        drop = STATE.get("cash_last_drop")
+        if not drop or drop.get("classified") != "invest":
+            return public()
+        amt = int(drop.get("amount") or 0)
+        if amt <= 0:
+            return public()
+        _push_history()
+        STATE["cash_invested"] = max(0, int(STATE.get("cash_invested") or 0) - amt)
+        drop = dict(drop)
+        drop["classified"] = "kit"
+        drop["manual"] = False
+        STATE["cash_kits"] = int(STATE.get("cash_kits") or 0) + amt
+        STATE["cash_last_drop"] = drop
+        save()
+        broadcast({"type": "cash", "state": public()})
+        return public()
+
+
+def apply_cash(balance, how=None):
+    """In-game balance reading. how is detector context ('menu'|'pair'|'right'|...).
+
+    Profit = (cash_now - cash_start) + cash_invested.
+    One-time unlocks/buys (>=$5K, not post-death, menu or round) add to cash_invested.
+    """
+    with LOCK:
+        now = time.time()
+        # Idle auto-reset removed for stream sessions; only explicit Start session / reset.
+        gap = float(CFG.get("new_session_after_hours", 0) or 0) * 3600
         if gap > 0 and STATE["last_event_ts"] and now - STATE["last_event_ts"] > gap:
             do_reset(auto=True)
         STATE["last_event_ts"] = now
-        if STATE.get("cash_start") is None:
+        # Do not auto-baseline on first OCR tick anymore — wait for Start session / go-live
+        # unless a session was already started (or legacy state has cash_start set).
+        if STATE.get("cash_start") is None and STATE.get("cash_session_started"):
             STATE["cash_start"] = balance
+        elif STATE.get("cash_start") is None and not STATE.get("cash_session_started"):
+            # Legacy / first-run convenience: first reading still seeds baseline so the
+            # overlay is not stuck on "waiting" mid-stream after a hot deploy. Operator
+            # can hit Start session to re-baseline cleanly.
+            STATE["cash_start"] = balance
+            STATE["cash_session_started"] = True
         prev = STATE.get("cash_now")
         if prev == balance:
             return public()
-        # A big drop that comes back to (about) the old level within a few minutes was a misread, not spending:
-        # only what ends up ABOVE the old level counts as income (Oct 18 fix; misreads inflated Oct 15/16 by ~100k each).
+        # Reject single-step moves bigger than CASH_MAX_STEP as OCR noise —
+        # do not update cash_now (STREAM PROFIT is balance-based, so a bogus
+        # 200k flash would otherwise show as +$200k profit).
+        if prev is not None and abs(balance - prev) > CASH_MAX_STEP:
+            print(f"cash: ignoring implausible jump {prev} -> {balance}", flush=True)
+            return public()
         dip = STATE.get("cash_dip")
+        spike = STATE.get("cash_spike")
         if dip and now - dip[1] > CASH_DIP_WINDOW_S:
             dip = None
+        if spike and now - spike[1] > CASH_SPIKE_WINDOW_S:
+            spike = None  # window expired: earnings were real
         gain = balance - prev if prev is not None else 0
+        skip_drop = False
+        # Drop-then-recover misread (existing)
         if prev is not None and -gain >= CASH_DIP_MIN and not dip:
             dip = [prev, now]
         elif gain > 0 and dip and dip[0] - 2_000 <= balance <= dip[0] + 15_000:
@@ -174,9 +307,58 @@ def apply_cash(balance):
                   flush=True)
             gain = max(0, balance - dip[0])
             dip = None
+        # Spike-then-drop misread (mirror of dip): a large upward jump that FULLY reverses
+        # back near the pre-spike baseline was OCR noise. Earn-then-spend does NOT reverse
+        # all the way back, so it keeps the earnings and classifies the drop normally.
+        if prev is not None and gain >= CASH_DIP_MIN and spike is None:
+            spike = [prev, now, gain]  # base, ts, credited_gain
+        elif gain < 0 and spike is not None:
+            base, sts, credited = spike[0], spike[1], spike[2]
+            drop_here = prev - balance
+            # Only reverse when the entire spike fully unwinds back to the pre-spike
+            # baseline (OCR flash). A partial spend (kit / unlock) after a real earn
+            # must NOT wipe the earnings — end balance stays well above base, or the
+            # drop is much smaller than the spike.
+            full_unwind = (
+                abs(balance - base) <= 2_000
+                and abs(drop_here - credited) <= 5_000
+                and drop_here >= 0.85 * max(1, credited)
+            )
+            if full_unwind:
+                print(f"cash: {base} -> {prev} -> {balance} looks like a misread spike; reversing +{credited}",
+                      flush=True)
+                STATE["cash_earned"] = max(0, int(STATE.get("cash_earned") or 0) - int(credited))
+                skip_drop = True
+                gain = 0
+                spike = None
+                dip = None
+            else:
+                # Real spend after a real earn — drop the spike arm, keep earnings.
+                spike = None
         if 0 < gain <= CASH_MAX_STEP:
             STATE["cash_earned"] = int(STATE.get("cash_earned") or 0) + gain
+        # Spending / unlocks (skipped when the drop is just undoing a fake spike)
+        if prev is not None and balance < prev and not skip_drop:
+            drop_amt = prev - balance
+            if 0 < drop_amt <= CASH_MAX_STEP:
+                kind = classify_drop(
+                    drop_amt,
+                    how=how,
+                    now=now,
+                    last_death_ts=STATE.get("last_death_ts") or 0,
+                )
+                if kind == "invest":
+                    STATE["cash_invested"] = int(STATE.get("cash_invested") or 0) + int(drop_amt)
+                elif kind == "kit":
+                    STATE["cash_kits"] = int(STATE.get("cash_kits") or 0) + int(drop_amt)
+                STATE["cash_last_drop"] = {
+                    "amount": int(drop_amt),
+                    "ts": now,
+                    "classified": kind,
+                    "how": how,
+                }
         STATE["cash_dip"] = dip
+        STATE["cash_spike"] = spike
         STATE["cash_now"] = balance
         save()
         broadcast({"type": "cash", "state": public()})
@@ -215,6 +397,7 @@ def apply(kind):
             STATE["deaths"] += 1
             STATE["streak"] = 0
             STATE["multi"] = 0
+            STATE["last_death_ts"] = now
         elif kind == "win":
             STATE["wins"] += 1
         STATE["last_event_ts"] = now
@@ -340,15 +523,33 @@ class Handler(BaseHTTPRequestHandler):
                 save_cfg()
                 broadcast({"type": "theme", "name": name})
             return self._send(200, json.dumps({"theme": CFG.get("overlay_theme", "protocol"), "themes": THEMES}))
+        if p in ("/api/cash/invest", "/api/invest"):
+            return self._send(200, json.dumps(mark_last_drop_invested()))
+        if p in ("/api/cash/invest/undo", "/api/invest/undo"):
+            return self._send(200, json.dumps(undo_last_invest()))
+        if p in ("/api/cash/session/start", "/api/session/start"):
+            # optional ?balance=N; else uses current cash_now
+            bal = None
+            if "balance" in qs:
+                try:
+                    bal = int(qs.get("balance", ["0"])[0].replace(",", ""))
+                except ValueError:
+                    return self._send(400, '{"error":"balance must be a number"}')
+            return self._send(200, json.dumps(start_cash_session(bal)))
         if p.startswith("/api/cash/"):
             # /api/cash/<balance> -- feed a balance by hand (testing, or a manual correction)
+            # optional ?how=menu|pair|right
             try:
-                return self._send(200, json.dumps(apply_cash(int(p.rsplit("/", 1)[-1].replace(",", "")))))
+                bal = int(p.rsplit("/", 1)[-1].replace(",", ""))
             except ValueError:
                 return self._send(400, '{"error":"balance must be a number"}')
+            how = (qs.get("how") or [None])[0]
+            return self._send(200, json.dumps(apply_cash(bal, how=how)))
         if p.startswith("/api/"):
             kind = p.rsplit("/", 1)[-1]
-            if kind in ("kill", "death", "win", "undo", "reset"):
+            if kind in ("kill", "death", "win", "undo", "reset", "invest"):
+                if kind == "invest":
+                    return self._send(200, json.dumps(mark_last_drop_invested()))
                 return self._send(200, json.dumps(apply(kind)))
         return self._send(404, '{"error":"not found"}')
 
@@ -434,6 +635,10 @@ def hotkey_loop():
             else:
                 armed = now
                 broadcast({"type": "armreset"})
+        elif action == "invest":
+            mark_last_drop_invested()
+        elif action == "invest_undo":
+            undo_last_invest()
         elif action:
             apply(action)
 
@@ -450,7 +655,9 @@ if __name__ == "__main__":
         from autodetect import AutoDetect
         def emit(ev):
             if isinstance(ev, tuple) and ev[0] == "cash":
-                apply_cash(ev[1])
+                # ("cash", balance) or ("cash", balance, how)
+                how = ev[2] if len(ev) >= 3 else None
+                apply_cash(ev[1], how=how)
             elif ev in ("kill", "death", "win"):
                 apply(ev)
             else:

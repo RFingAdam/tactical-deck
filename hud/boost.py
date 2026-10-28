@@ -17,7 +17,12 @@ BACKGROUND = {
     "ms-teams.exe", "winword.exe", "phoneexperiencehost.exe", "crossdeviceresume.exe", "searchhost.exe",
     "fences.exe", "docker desktop.exe", "com.docker.backend.exe", "brave.exe", "claude.exe",
     "powerpanel personal.exe", "ppuser.exe", "navigraph simlink.exe", "microsoft.lists.exe",
+    # Oct 21: also seen busy on the P-cores during a match
+    "steelseriesgg.exe", "steelseriesggez.exe", "xboxpcapp.exe", "xboxpcappft.exe", "wallpaper32.exe",
+    "wallpaper64.exe", "nextcloud.exe", "razerappengine.exe",
 }
+# Oct 21: pinning the game itself to the P-cores was tried live and measured no better (avg 90 vs 93 fps, 1-in-10
+# lows 68 vs 72), so the game keeps all cores and Windows' scheduler places its threads.
 # never touched: audio (voicemeeter, audiodg, SteelSeriesEngine/Sonar), Discord (voice), TikTok LIVE Studio,
 # Companion (stream buttons), the HUD itself, and anything we can't open (services / elevated).
 
