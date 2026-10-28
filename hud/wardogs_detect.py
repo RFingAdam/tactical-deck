@@ -9,7 +9,7 @@ Signals (calibrated on Wardogs highlight clips, 3440x1440 borderless):
   cash  -> account balance from the top-right money readout ("$47,396  $200,699  140" = the game's own session
            delta, balance, level). The balance is the RIGHT-MOST $ amount of that header row (Oct 18; it used to be
            the largest, which picked up the session delta whenever OCR missed the balance). It updates live in
-           matches and menus. The server adds up the increases as "debt paid" for the stream.
+           matches and menus. The server shows balance now minus balance at the start as "stream profit".
 """
 import asyncio, re, time
 from PIL import Image, ImageOps
@@ -31,7 +31,11 @@ REGIONS = {
 # OCR is noisy on thin HUD text, so match loosely.
 RE_CONFIRM = re.compile(r"(C[O0C]N?F[I1lL|]R|NF[I1lL|]R[MHN]|[KR][I1lL|]{1,3}[\s.>]*[CE][O0CD]N)", re.I)
 RE_WIN = re.compile(r"V[I1l|]CT[O0]RY", re.I)
-RE_RESPAWN = re.compile(r"RESP[A4]WN|SP[A4]WNING\s*IN|DEPL[O0]YMENT\s*B[O0]ARD", re.I)
+# "RESPAWNING IN 4..." on black = a real death, on its own.
+RE_RESPAWN = re.compile(r"RESP[A4]WN[I1l|]NG|SP[A4]WN[I1l|]NG\s*[I1l|]N", re.I)
+# The Deployment Board (map + SPAWN button) also opens at the APC / spawn point while alive, so these only
+# count as a death if we saw you go down first (bled out straight to the board).
+RE_RESPAWN_IF_DOWNED = re.compile(r"RESP[A4]WN|DEPL[O0]YMENT\s*B[O0]ARD", re.I)
 RE_DAMAGELOG = re.compile(r"DAMAGE\s*L[O0]G|V[I1l]EW\s*DAMAGE", re.I)
 RE_CASH = re.compile(r"(-?)\s?\$\s?(\d{1,3}(?:,\d{3})+)")
 RE_DOWNED = re.compile(r"G[I1l]VE\s*U|F[O0]R\s*HEL|CALL\s*F[O0]R", re.I)
@@ -234,6 +238,7 @@ class Detector:
         self.win_hits = 0
         self.respawn_hits = 0
         self.last_respawn_check = -1e9
+        self.death_text = ""      # OCR text that triggered the last death (logged)
         self.down_started_ts = -1e9
         self.last_feed_ts = None
         self.last_occl_check = -1e9
@@ -311,11 +316,12 @@ class Detector:
         if ts - self.last_respawn_check >= 0.5:
             self.last_respawn_check = ts
             rtext = " ".join(ocr_lines(v_gray(region(frame, "respawn"))))
-            if RE_RESPAWN.search(rtext):
+            if RE_RESPAWN.search(rtext) or (self.downed_active and RE_RESPAWN_IF_DOWNED.search(rtext)):
                 self.respawn_hits += 1
                 if self.respawn_hits >= 2 and ts - self.last_death_ts > self.death_lock_s:
                     events.append("death")
                     self.last_death_ts = ts
+                    self.death_text = rtext[:60]
                     self.downed_active = False
             else:
                 self.respawn_hits = 0
@@ -341,5 +347,5 @@ class Detector:
             self.occluded = False
             if ts - self.down_started_ts <= self.MAX_DOWN_S:
                 events.append("revived")
-        return events, {"confirm": n, "confirm_lines": seen, "downed": dtext,
+        return events, {"confirm": n, "confirm_lines": seen, "downed": dtext, "death_text": self.death_text,
                         "occluded": self.occluded if self.downed_active else False}

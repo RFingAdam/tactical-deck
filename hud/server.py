@@ -115,8 +115,13 @@ def build_id():
 def public():
     s = dict(STATE)
     s["kd"] = round(s["kills"] / max(1, s["deaths"]), 2)
-    # "Debt paid" = money earned this stream: every increase in the balance counts, purchases don't take it back
-    s["cash_delta"] = int(s.get("cash_earned") or 0) if s.get("cash_now") is not None else None
+    # "Stream profit" (Oct 23, was "debt paid" = gross earnings): money earned minus kits/gear bought this stream,
+    # i.e. balance now - balance at the start of the session. Can go negative.
+    if s.get("cash_now") is not None and s.get("cash_start") is not None:
+        s["cash_delta"] = int(s["cash_now"]) - int(s["cash_start"])
+        s["cash_spent"] = max(0, int(s.get("cash_earned") or 0) - s["cash_delta"])
+    else:
+        s["cash_delta"] = None
     return s
 
 

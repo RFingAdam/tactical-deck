@@ -60,7 +60,7 @@ kbd{background:#0f1218;border:1px solid var(--line);padding:1px 6px;font-family:
         <div class="stat d"><div class="l">DEATHS</div><div class="v" id="d">0</div></div>
         <div class="stat w"><div class="l">WINS</div><div class="v" id="w">0</div></div>
       </div>
-      <div class="meta"><span>K/D <b id="kd">0.00</b></span><span>STREAK <b id="s">0</b></span><span>BEST <b id="b">0</b></span><span>DEBT PAID <b id="cash" style="color:var(--cash)">$0</b></span></div>
+      <div class="meta"><span>K/D <b id="kd">0.00</b></span><span>STREAK <b id="s">0</b></span><span>BEST <b id="b">0</b></span><span>STREAM PROFIT <b id="cash" style="color:var(--cash)">$0</b></span></div>
       <div class="big">
         <button class="k" data-a="kill">+ KILL</button>
         <button class="d" data-a="death">+ DEATH</button>
@@ -133,7 +133,7 @@ function toast(t){const e=$("toast");e.textContent=t;e.classList.add("on");clear
 function render(s){$("k").textContent=s.kills;$("d").textContent=s.deaths;$("w").textContent=s.wins;
   $("kd").textContent=Number(s.kd||0).toFixed(2);$("s").textContent=s.streak;$("b").textContent=s.best_streak;
   $("sess").textContent="session since "+new Date(s.session_started*1000).toLocaleString();
-  const cd=s.cash_delta;$("cash").textContent=cd==null?"waiting for first reading":"$"+Number(cd).toLocaleString("en-US");}
+  const cd=s.cash_delta;$("cash").textContent=cd==null?"waiting for first reading":(cd<0?"-$":"$")+Math.abs(Number(cd)).toLocaleString("en-US")+"  (earned $"+Number(s.cash_earned||0).toLocaleString("en-US")+", spent $"+Number(s.cash_spent||0).toLocaleString("en-US")+")";$("cash").style.color=cd!=null&&cd<0?"#ff6b6b":"var(--cash)";}
 function hit(path){return fetch(path,{method:"POST"}).then(r=>r.json()).then(s=>{if(s&&s.kills!==undefined)render(s)}).catch(()=>toast("server offline"))}
 document.querySelectorAll("[data-a]").forEach(b=>b.onclick=()=>hit("/api/"+b.dataset.a));
 document.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>fetch("/api/test/"+b.dataset.t,{method:"POST"}));
