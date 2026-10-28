@@ -1,7 +1,7 @@
 {
   "host": "127.0.0.1",
   "port": 8790,
-  "new_session_after_hours": 4,
+  "new_session_after_hours": 0,
   "multikill_window_sec": 8,
   "hotkeys_enabled": true,
   "auto_detect": true,
@@ -14,7 +14,9 @@
     "death": "ctrl+alt+2",
     "win": "ctrl+alt+3",
     "undo": "ctrl+alt+4",
-    "reset": "ctrl+alt+0"
+    "reset": "ctrl+alt+0",
+    "invest": "ctrl+alt+5",
+    "invest_undo": "ctrl+alt+6"
   },
   "overlay_sounds": true,
   "overlay_theme": "protocol"

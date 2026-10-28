@@ -156,9 +156,10 @@ class AutoDetect(threading.Thread):
                     except Exception as e:  # never let it break kill/death detection
                         print('server watch error:', e)
                 for ev in events:
-                    if isinstance(ev, tuple):  # ("cash", balance)
+                    if isinstance(ev, tuple):  # ("cash", balance) or ("cash", balance, how)
                         self.status[ev[0]] = ev[1]
-                        print(time.strftime("%Y-%m-%d %H:%M:%S"), "auto:", ev[0], ev[1], flush=True)
+                        extra = f" how={ev[2]}" if len(ev) >= 3 else ""
+                        print(time.strftime("%Y-%m-%d %H:%M:%S"), "auto:", ev[0], ev[1], extra, flush=True)
                         self.emit(ev)
                         continue
                     if ev + "s" in self.status:

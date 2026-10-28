@@ -29,13 +29,23 @@ While `WardogsClient-Win64-Shipping.exe` is the focused window, the server reads
 
 Pause or resume it from the control panel, or set `auto_detect` to false in `config.json`.
 
+## STREAM PROFIT
+`cash_delta = (cash_now - cash_start) + cash_invested`.
+
+One-time unlocks/buys are **invested** (not losses) when the drop is ≥ $5K, not within ~60s of a death/respawn, and either a menu OCR reading or a round-thousand amount. Per-life kits (~$16K after death) stay as costs in `cash_kits`.
+
+Manual override: control-panel **Mark last drop invested** / hotkey Ctrl+Alt+5. Undo invest: Ctrl+Alt+6. APIs: `/api/cash/invest`, `/api/cash/invest/undo`.
+
 ## Manual overrides
-Hotkeys that work in-game: Ctrl+Alt+1 kill · Ctrl+Alt+2 death · Ctrl+Alt+3 win · Ctrl+Alt+4 undo · Ctrl+Alt+0 twice = reset.
-Companion / Stream Deck: HTTP GET `http://127.0.0.1:8790/api/kill` (also `death`, `win`, `undo`, `reset`).
+Hotkeys that work in-game: Ctrl+Alt+1 kill · Ctrl+Alt+2 death · Ctrl+Alt+3 win · Ctrl+Alt+4 undo · Ctrl+Alt+5 mark last drop invested · Ctrl+Alt+6 undo invest · Ctrl+Alt+0 twice = reset.
+Companion / Stream Deck: HTTP GET `http://127.0.0.1:8790/api/kill` (also `death`, `win`, `undo`, `reset`, `invest`, `session/start`).
 Test animations without changing counts: `/api/test/kill?n=5`, `/api/test/death`, `/api/test/win`.
 
 ## New stream = zero
-The first event after 4+ idle hours (`new_session_after_hours`) resets the counters. Hold RESET on the control panel to zero them by hand.
+Idle auto-reset is **off** by default (`new_session_after_hours: 0`). Hit **Start session** on the control panel (or `/api/session/start`) at go-live so the baseline is intentional and unlocks stay invested. Hold RESET to zero counters by hand.
+
+## Tests
+`python test_stream_profit.py` — unit tests for invest/kit classification and a calibrated 2026-10-28 replay (~+$43K stream profit vs deeply-negative raw delta).
 
 ## Sound design
 Built-in sounds are short and restrained: a soft thump and click per kill, a low cinematic hit on 5/8/12/20 streaks, a muffled hit on death, and a warm chord swell on VICTORY. Default volume is 0.55. Streak callouts are LETHAL (5), RELENTLESS (8), UNTOUCHABLE (12), and APEX (20). Doubles only show in the feed. Triples and up get a callout.

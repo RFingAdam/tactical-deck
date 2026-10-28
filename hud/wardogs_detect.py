@@ -338,7 +338,8 @@ class Detector:
                     self.cash_cand, self.cash_cand_n = v, 1
                 if v != self.cash and self.cash_cand_n >= self.cash_needed(v, how):
                     self.cash = v
-                    events.append(("cash", v))
+                    # Include how so the server can treat menu unlocks as invested, not losses.
+                    events.append(("cash", v, how))
         # ---- revived: ALL downed UI gone for 6 s of visible gameplay (tolerates white-flash / blur frames,
         #      menus, alt-tab) and no respawn countdown ----
         if self.downed_active and not down and ts - self.last_downed_ts > self.REVIVE_CLEAR_S \
