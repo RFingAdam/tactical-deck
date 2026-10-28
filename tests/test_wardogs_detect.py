@@ -158,18 +158,18 @@ def cash(v, how="pair"):
 
 def test_cash_first_reading_needs_two_checks():
     assert kinds(run([(cash(200699), 1)])) == []          # one check only
-    assert kinds(run([(cash(200699), 4)])) == [("cash", 200699)]
+    assert kinds(run([(cash(200699), 4)])) == [("cash", 200699, "pair")]
 
 
 def test_cash_small_change_accepted_quickly():
     ev = kinds(run([(cash(100000), 4), (cash(104000), 4)]))
-    assert ev == [("cash", 100000), ("cash", 104000)]
+    assert ev == [("cash", 100000, "pair"), ("cash", 104000, "pair")]
 
 
 def test_cash_big_jump_needs_four_checks():
-    assert kinds(run([(cash(100000), 4), (cash(180000), 5)])) == [("cash", 100000)]
-    assert kinds(run([(cash(100000), 4), (cash(180000), 7)])) == [("cash", 100000), ("cash", 180000)]
+    assert kinds(run([(cash(100000), 4), (cash(180000), 5)])) == [("cash", 100000, "pair")]
+    assert kinds(run([(cash(100000), 4), (cash(180000), 7)])) == [("cash", 100000, "pair"), ("cash", 180000, "pair")]
 
 
 def test_cash_chopped_reading_is_held_back():
-    assert kinds(run([(cash(56142), 4), (cash(6142), 20)])) == [("cash", 56142)]
+    assert kinds(run([(cash(56142), 4), (cash(6142), 20)])) == [("cash", 56142, "pair")]

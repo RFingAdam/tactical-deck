@@ -285,6 +285,12 @@ def apply_cash(balance, how=None):
         prev = STATE.get("cash_now")
         if prev == balance:
             return public()
+        # Reject single-step moves bigger than CASH_MAX_STEP as OCR noise —
+        # do not update cash_now (STREAM PROFIT is balance-based, so a bogus
+        # 200k flash would otherwise show as +$200k profit).
+        if prev is not None and abs(balance - prev) > CASH_MAX_STEP:
+            print(f"cash: ignoring implausible jump {prev} -> {balance}", flush=True)
+            return public()
         dip = STATE.get("cash_dip")
         spike = STATE.get("cash_spike")
         if dip and now - dip[1] > CASH_DIP_WINDOW_S:
