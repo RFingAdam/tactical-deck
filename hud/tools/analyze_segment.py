@@ -4,6 +4,7 @@ import sys, os, subprocess, json
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from PIL import Image
 import wardogs_detect as wd
+from layout import ocr_game_rect
 
 def read_exact(stream, n):
     """Read exactly n bytes from a pipe (or fewer only at EOF)."""
@@ -17,9 +18,10 @@ def read_exact(stream, n):
     return b"".join(chunks)
 f, ss, dur = sys.argv[1], float(sys.argv[2]), float(sys.argv[3])
 fps = float(sys.argv[4]) if len(sys.argv) > 4 else 4
-W, H = 1920, 803  # game area inside the 1080 canvas
+W, H = 1920, 1080  # full stream canvas; OCR crops follow the ultrawide game rect
+wd.set_frame_game_rect(ocr_game_rect(W, H, "ultrawide-letterbox"))
 p = subprocess.Popen(["ffmpeg", "-v", "error", "-ss", str(ss), "-t", str(dur), "-i", f,
-                      "-vf", f"fps={fps},scale=1920:1080,crop=1920:803:0:138,format=rgb24", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+                      "-vf", f"fps={fps},scale=1920:1080,format=rgb24", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
                      stdout=subprocess.PIPE, bufsize=0)
 det, i, events = wd.Detector(), 0, []
 while True:

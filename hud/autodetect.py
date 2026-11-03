@@ -96,14 +96,23 @@ class Capture:
 
 
 class AutoDetect(threading.Thread):
-    def __init__(self, emit, game_exe="WardogsClient-Win64-Shipping.exe", fps=4.0, enabled=True):
+    def __init__(self, emit, game_exe="WardogsClient-Win64-Shipping.exe", fps=4.0, enabled=True, cfg=None):
         super().__init__(daemon=True)
         self.emit = emit
-        self.game_exe = game_exe.lower()
+        self.game_exe = (game_exe or "").lower()
         self.period = 1.0 / max(0.5, float(fps))
         self.enabled = enabled
+        self.cfg = cfg if cfg is not None else {}
+        self._pending_profile = None
         self.status = {"enabled": enabled, "running": False, "game_focused": False, "fps": 0.0,
                        "kills": 0, "deaths": 0, "wins": 0, "last_event": None, "error": None}
+
+    def use_profile(self, profile):
+        """Swap OCR regions / keywords and the focused-window exe without restarting the thread."""
+        profile = profile or {}
+        self.game_exe = (profile.get("game_exe") or "").lower()
+        self._pending_profile = profile
+        self.status["game"] = profile.get("id")
 
     def run(self):
         try:
@@ -131,11 +140,17 @@ class AutoDetect(threading.Thread):
             t0 = time.time()
             try:
                 self.status["enabled"] = self.enabled
+                pending = self._pending_profile
+                if pending is not None:
+                    wd.apply_detect_profile(pending)
+                    det = wd.Detector()
+                    self.game_exe = (pending.get("game_exe") or "").lower()
+                    self._pending_profile = None
                 if not self.enabled:
                     time.sleep(0.5)
                     continue
                 hwnd, exe = foreground_exe()
-                focused = exe == self.game_exe
+                focused = bool(self.game_exe) and exe == self.game_exe
                 self.status["game_focused"] = focused
                 if not focused:
                     time.sleep(0.5)
@@ -145,6 +160,17 @@ class AutoDetect(threading.Thread):
                     time.sleep(0.5)
                     continue
                 frame = grabber.grab(rect)
+                size = getattr(frame, "size", None) or (rect["width"], rect["height"])
+                try:
+                    import layout as _layout
+                    gr = _layout.ocr_game_rect(
+                        size[0], size[1],
+                        self.cfg.get("display_layout", "16:9"),
+                        self.cfg.get("game_rect"),
+                    )
+                    wd.set_frame_game_rect(gr)
+                except Exception:
+                    wd.set_frame_game_rect(None)
                 events, _dbg = det.feed(frame, t0)
                 if perf:
                     perf.maybe_log(frame, wd)

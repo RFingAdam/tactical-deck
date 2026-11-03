@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "id": "example",
+  "name": "Example FPS",
+  "game_exe": "",
+  "banner": "Example // Live Stats",
+  "stat_names": {
+    "kills": "ELIMS",
+    "deaths": "DEATHS",
+    "wins": "WINS",
+    "cash": "EARNED",
+    "kd": "K/D",
+    "streak": "STREAK",
+    "best": "BEST"
+  },
+  "colors": {
+    "kill": "#ff9f1c",
+    "death": "#7aa2ff",
+    "win": "#ffe066",
+    "cash": "#5eead4"
+  },
+  "banners": {
+    "kill": "ELIMINATED",
+    "death": "YOU DIED",
+    "win": "WINNER",
+    "win_tag": "ROUND OVER",
+    "downed": "DOWN",
+    "revived": "UP"
+  },
+  "sprees": {
+    "5": "ON FIRE",
+    "8": "UNSTOPPABLE",
+    "12": "GODLIKE",
+    "20": "LEGENDARY"
+  },
+  "detect": {
+    "regions": {
+      "confirm": [0.35, 0.70, 0.65, 0.90],
+      "downed": [0.38, 0.86, 0.64, 0.94],
+      "center": [0.15, 0.10, 0.85, 0.70],
+      "win": [0.25, 0.08, 0.75, 0.40]
+    },
+    "keywords": {
+      "confirm": "ELIMINATED|FRAGGED",
+      "win": "WINNER|VICTORY",
+      "downed": "HOLD\\s*TO\\s*REVIVE|BLEEDING"
+    }
+  }
+}

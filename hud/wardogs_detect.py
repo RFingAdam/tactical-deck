@@ -17,7 +17,7 @@ from winrt.windows.media.ocr import OcrEngine
 from winrt.windows.graphics.imaging import SoftwareBitmap, BitmapPixelFormat
 from winrt.windows.storage.streams import DataWriter
 
-# Regions as fractions of the game frame: (left, top, right, bottom)
+# Regions as fractions of the *game* rect (see layout.py / games/wardogs.json): (left, top, right, bottom)
 REGIONS = {
     "confirm": (0.40, 0.66, 0.60, 0.88),  # tall enough for 5+ stacked lines
     "downed": (0.38, 0.86, 0.64, 0.94),
@@ -27,6 +27,21 @@ REGIONS = {
     "damagelog": (0.86, 0.60, 1.00, 0.78),  # "VIEW DAMAGE LOG": on screen for the whole down, even mid-revive
     "cash": (0.82, 0.00, 1.00, 0.075),  # money readout in the top-right header
 }
+
+# (x, y, w, h) of the game inside the captured frame. None = the frame is the game
+# (live window capture). A 1920x1080 letterboxed stream recording sets this to the
+# ultrawide game band so the same fractional regions still hit the kill feed.
+_FRAME_GAME_RECT = None
+_NEVER = re.compile(r"(?!x)x")
+
+
+def set_frame_game_rect(rect):
+    """Anchor OCR crops to a game rect in captured-frame pixels, or None for full frame."""
+    global _FRAME_GAME_RECT
+    if rect is None:
+        _FRAME_GAME_RECT = None
+        return
+    _FRAME_GAME_RECT = tuple(int(v) for v in rect)
 
 # OCR is noisy on thin HUD text, so match loosely.
 RE_CONFIRM = re.compile(r"(C[O0C]N?F[I1lL|]R|NF[I1lL|]R[MHN]|[KR][I1lL|]{1,3}[\s.>]*[CE][O0CD]N)", re.I)
@@ -42,6 +57,54 @@ RE_DOWNED = re.compile(r"G[I1l]VE\s*U|F[O0]R\s*HEL|CALL\s*F[O0]R", re.I)
 # Full-screen UI (inventory, map, pause/settings, scoreboard) that can hide the downed prompt.
 RE_MENU = re.compile(r"INVENT[O0]RY|BACKPACK|L[O0]AD[O0]UT|EQUIP|SETTINGS|[O0]PTI[O0]NS|RESUME|SC[O0]REB[O0]ARD"
                      r"|LEAVE\s*MATCH|QUIT|KEYBIND|CONTR[O0]LS|AUDI[O0]|GRAPHICS|DR[O0]P\s*ITEM", re.I)
+
+_DEFAULT_REGIONS = {k: tuple(v) for k, v in REGIONS.items()}
+_DEFAULT_RE = {
+    "confirm": RE_CONFIRM,
+    "win": RE_WIN,
+    "respawn": RE_RESPAWN,
+    "respawn_if_downed": RE_RESPAWN_IF_DOWNED,
+    "damagelog": RE_DAMAGELOG,
+    "downed": RE_DOWNED,
+    "menu": RE_MENU,
+    "cash": RE_CASH,
+}
+
+
+def apply_detect_profile(profile):
+    """Replace OCR regions and keywords from a games/*.json profile. Restores Wardogs defaults if detect is omitted."""
+    global REGIONS, RE_CONFIRM, RE_WIN, RE_RESPAWN, RE_RESPAWN_IF_DOWNED, RE_DAMAGELOG, RE_DOWNED, RE_MENU, RE_CASH
+    det = (profile or {}).get("detect") if isinstance(profile, dict) else None
+    if not det:
+        REGIONS = dict(_DEFAULT_REGIONS)
+        RE_CONFIRM = _DEFAULT_RE["confirm"]
+        RE_WIN = _DEFAULT_RE["win"]
+        RE_RESPAWN = _DEFAULT_RE["respawn"]
+        RE_RESPAWN_IF_DOWNED = _DEFAULT_RE["respawn_if_downed"]
+        RE_DAMAGELOG = _DEFAULT_RE["damagelog"]
+        RE_DOWNED = _DEFAULT_RE["downed"]
+        RE_MENU = _DEFAULT_RE["menu"]
+        RE_CASH = _DEFAULT_RE["cash"]
+        return
+    regions = det.get("regions")
+    REGIONS = {k: tuple(float(x) for x in v) for k, v in regions.items()} if regions else dict(_DEFAULT_REGIONS)
+    kws = det.get("keywords") or {}
+
+    def rx(key):
+        s = kws.get(key)
+        if not s:
+            return _DEFAULT_RE[key] if not regions else _NEVER
+        return re.compile(s, re.I)
+
+    RE_CONFIRM = rx("confirm")
+    RE_WIN = rx("win")
+    RE_RESPAWN = rx("respawn")
+    RE_RESPAWN_IF_DOWNED = rx("respawn_if_downed")
+    RE_DAMAGELOG = rx("damagelog")
+    RE_DOWNED = rx("downed")
+    RE_MENU = rx("menu")
+    RE_CASH = rx("cash")
+
 
 _engine = OcrEngine.try_create_from_user_profile_languages()
 _loop = asyncio.new_event_loop()
@@ -60,9 +123,17 @@ def ocr_lines(img):
 
 def region(frame, name):
     W, H = frame.size
+    if _FRAME_GAME_RECT:
+        gx, gy, gw, gh = _FRAME_GAME_RECT
+    else:
+        gx, gy, gw, gh = 0, 0, W, H
+    gh = max(int(gh), 1)
+    gw = max(int(gw), 1)
+    if name not in REGIONS:
+        return frame.crop((gx, gy, gx + 1, gy + 1))
     l, t, r, b = REGIONS[name]
-    img = frame.crop((int(l * W), int(t * H), int(r * W), int(b * H)))
-    scale = 2.4 * 802 / H if H < 1200 else 1.35 * 1440 / H  # clips are 802 px tall, live is 1440
+    img = frame.crop((int(gx + l * gw), int(gy + t * gh), int(gx + r * gw), int(gy + b * gh)))
+    scale = 2.4 * 802 / gh if gh < 1200 else 1.35 * 1440 / gh  # clips are 802 px tall, live is 1440
     return img.resize((max(1, int(img.width * scale)), max(1, int(img.height * scale))), Image.LANCZOS)
 
 

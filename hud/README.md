@@ -18,6 +18,30 @@ URL options (combine with `&`):
 - `hud=0`: animations only
 - `big=0`: no full-screen callouts
 
+## Setup for your monitor
+
+The overlay canvas is always 1920×1080. HUD tiles and the OCR kill-feed crops are anchored to a **game rect** on that canvas, picked on the control page (saved in `config.json`, also in `/api/state`).
+
+| Preset | Use it when | Game rect on the 1920×1080 canvas |
+|---|---|---|
+| **16:9** (default for new users) | The game fills the frame — a normal monitor, no letterbox | `0, 0, 1920, 1080` |
+| **ultrawide-letterbox** | 21:9 / 32:9 game in a 16:9 stream, black bars top and bottom (SwampBewdy's layout) | `0, 138, 1920, 803` — **pixel-identical to the original HUD** |
+| **custom** | Anything else | You set `x, y, w, h` |
+
+Existing installs that already have a `config.json` without this setting keep **ultrawide-letterbox**, so Adam's stream does not move.
+
+<p align="center">
+  <img src="../docs/media/hud-layout-16x9.png" alt="16:9 preset: HUD on the game, clear of kill feed, minimap and ammo" width="880">
+  <br><sub><b>16:9.</b> Solid tiles are the Protocol HUD (K/D/W top-left, STREAM PROFIT top-right under the in-game cash). Hatched zones are Wardogs' kill feed, minimap and ammo/health — the overlay does not cover them.</sub>
+</p>
+
+<p align="center">
+  <img src="../docs/media/hud-layout-ultrawide.png" alt="Ultrawide letterbox preset: HUD in the top black bar, game in the middle" width="880">
+  <br><sub><b>Ultrawide letterbox.</b> Same HUD as before: tiles sit in the top black bar, STREAM PROFIT in the top-right of that bar. The game (and its own HUD) is the middle band.</sub>
+</p>
+
+Pick the preset on http://127.0.0.1:8790/control → **Display layout**. No Streamlabs change needed; the overlay and the auto-detect crops update live.
+
 ## Auto-detect (Wardogs)
 While `WardogsClient-Win64-Shipping.exe` is the focused window, the server reads the screen about 4× per second with the built-in Windows OCR. It only reads pixels. It never touches game files or memory, and nothing leaves your PC.
 
@@ -27,7 +51,7 @@ While `WardogsClient-Win64-Shipping.exe` is the focused window, the server reads
 | Death | only a real death: the "RESPAWNING IN..." countdown. Getting downed shows a small DOWNED note, and a revive shows REVIVED. Neither counts |
 | Win | the end-of-match scoreboard headed **VICTORY**. DEFEAT and the "<TEAM> WINS" splash are ignored |
 
-Pause or resume it from the control panel, or set `auto_detect` to false in `config.json`.
+Pause or resume it from the control panel, or set `auto_detect` to false in `config.json`. Switch games from **Game** on the control page (`hud/games/<id>.json`); it applies live, no restart. See [CONTRIBUTING.md](../CONTRIBUTING.md#add-a-game) to add a profile.
 
 ## STREAM PROFIT
 `cash_delta = (cash_now - cash_start) + cash_invested`.
