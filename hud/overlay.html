@@ -45,7 +45,10 @@ body{font-family:"Chakra Petch",system-ui,sans-serif;color:var(--ink)}
 .sub .dim{color:rgba(255,255,255,.55)}
 
 
-/* ---------- bar layout: lives in the letterbox strip above the game ---------- */
+/* ---------- bar layout: lives in the letterbox strip above the game ----------
+   These pixels are the ultrawide-letterbox preset (game rect 0,138,1920,803).
+   overlay.js overwrites left/top/right from /api/state anchors so 16:9 and custom
+   follow the same game rect. Do not change the ultrawide numbers. */
 .pos-bar{left:40px;top:19px;flex-direction:row!important;align-items:flex-start;gap:10px!important}
 .pos-bar .brand{display:none!important}
 .pos-bar .tile{height:100px;width:136px}

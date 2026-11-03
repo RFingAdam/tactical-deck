@@ -19,5 +19,7 @@
     "invest_undo": "ctrl+alt+6"
   },
   "overlay_sounds": true,
-  "overlay_theme": "protocol"
+  "overlay_theme": "protocol",
+  "display_layout": "16:9",
+  "game": "wardogs"
 }

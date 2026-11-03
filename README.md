@@ -19,6 +19,7 @@
   <b><a href="#-features">Features</a></b> ·
   <b><a href="#-how-it-works">How it works</a></b> ·
   <b><a href="#-http-api">HTTP API</a></b> ·
+  <b><a href="#setup-for-your-monitor">Setup for your monitor</a></b> ·
   <b><a href="#-add-your-game">Add your game</a></b>
 </p>
 
@@ -76,7 +77,7 @@ Demo mode simulates playback with each clip's real length, so you can see combos
    python integrations/companion/add_tactical_pages.py --connection-label http --template-page 1
    ```
    This adds two finished pages, **TACTICAL** and **TACTICAL FX**. Your existing pages are verified byte-identical afterwards.
-6. **Optional: game-reactive.** Run `hud\start-hud.cmd` and add `http://127.0.0.1:8790/overlay?pos=bar` as a Browser Source.
+6. **Optional: game-reactive.** Run `hud\start-hud.cmd` and add `http://127.0.0.1:8790/overlay?pos=bar` as a Browser Source. On the control page, set **Display layout** to `16:9` (full-frame monitor) or `ultrawide-letterbox` (game in the middle with black bars — the original SwampBewdy layout).
 
 ## ✨ Features
 
@@ -203,9 +204,33 @@ The Director binds to `127.0.0.1` and rejects foreign Host/Origin headers, so a 
 
 Protocol HUD: `GET /api/kill|death|win|undo|reset` for manual overrides, `/api/test/kill?n=5` for animations without touching the counts, and `/events` for the SSE stream.
 
+## Setup for your monitor
+
+The Protocol HUD canvas is 1920×1080. Every overlay tile and the OCR kill-feed crops are anchored to a **game rect**, not to absolute canvas pixels, so a 16:9 monitor and an ultrawide-letterboxed stream both line up.
+
+| Preset | Who it's for |
+|---|---|
+| **16:9** | Default for new users. Game fills the frame. HUD sits on the game, clear of the kill feed, minimap and ammo/health. |
+| **ultrawide-letterbox** | 21:9 / 32:9 game inside a 16:9 canvas (black bars). Pixel-identical to the original SwampBewdy overlay. Existing installs without a layout setting keep this, so nothing moves on upgrade. |
+| **custom** | Set the game rectangle (`x, y, w, h`) yourself. |
+
+Pick it on http://127.0.0.1:8790/control → **Display layout**. It persists in `config.json` and is exposed on `/api/state`.
+
+<p align="center">
+  <img src="docs/media/hud-layout-16x9.png" alt="16:9 preset: HUD on the game, clear of kill feed, minimap and ammo" width="880">
+  <br><sub><b>16:9.</b> Protocol HUD tiles (solid) stay off Wardogs' kill feed, minimap and ammo/health (hatched).</sub>
+</p>
+
+<p align="center">
+  <img src="docs/media/hud-layout-ultrawide.png" alt="Ultrawide letterbox preset: HUD in the top black bar" width="880">
+  <br><sub><b>Ultrawide letterbox.</b> HUD in the top black bar, game in the middle — the original layout, unchanged.</sub>
+</p>
+
+More detail: [hud/README.md](hud/README.md#setup-for-your-monitor).
+
 ## 🧪 Add your game
 
-Detection isn't a black-box model. It's a **game profile**: screen regions, OCR keywords and timing rules (`hud/wardogs_detect.py`) tuned against real footage with the calibration kit in `hud/tools/`:
+Detection isn't a black-box model. It's a **game profile** (`hud/games/<id>.json`): kill-feed OCR regions and keywords, banner text, stat names and colours, tuned against real footage with the calibration kit in `hud/tools/`. Switch profiles from the HUD control page; it applies live, no restart.
 
 | Tool | What it's for |
 |---|---|
@@ -214,12 +239,12 @@ Detection isn't a black-box model. It's a **game profile**: screen regions, OCR 
 | `analyze_segment.py <vod> <start_s> <dur_s> [fps]` | Replays one slice of a recording frame by frame. |
 | `perf_report.py` | Summarizes GPU/CPU while live, to prove detection costs nothing in-game. |
 
-To add a profile:
+To add a profile, copy `hud/games/wardogs.json` (see [CONTRIBUTING.md — Add a game](CONTRIBUTING.md#add-a-game)):
 
 1. Record a few matches.
 2. Run `scan_recording.py` to see exactly what text your game prints for kills, downs, deaths and wins.
-3. Copy `wardogs_detect.py` and change the regions and keywords.
-4. Re-run until the timeline matches reality.
+3. Fill in regions (fractions of the game rect) and keywords. No ripped game assets.
+4. Re-run until the timeline matches reality. The control page switches games without a restart.
 
 **PRs with new game profiles are the #1 most wanted contribution.**
 

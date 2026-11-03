@@ -7,7 +7,7 @@ Stdlib only (Python 3.9+). Run:  pythonw server.py   (or double-click start-hud.
 """
 import json, os, sys, time, threading, queue, mimetypes, ctypes
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import parse_qs, unquote, urlparse
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CFG_PATH = os.path.join(ROOT, "config.json")
@@ -25,6 +25,8 @@ DEFAULT_CFG = {
     "sound_pack": "tactical",
     "detect_fps": 4,
     "game_exe": "WardogsClient-Win64-Shipping.exe",
+    "display_layout": "16:9",  # new users; existing configs without this key keep ultrawide-letterbox
+    "game": "wardogs",
     "hotkeys": {
         "kill": "ctrl+alt+1",
         "death": "ctrl+alt+2",
@@ -43,6 +45,10 @@ def load_cfg():
         try:
             user = json.load(open(CFG_PATH, encoding="utf-8-sig"))
             hk = user.pop("hotkeys", None)
+            # Existing installs (Adam's ultrawide stream) never had this key.
+            # Keep today's letterbox layout so nothing moves on upgrade.
+            if "display_layout" not in user:
+                cfg["display_layout"] = "ultrawide-letterbox"
             cfg.update(user)
             if isinstance(hk, dict):
                 cfg["hotkeys"].update(hk)
@@ -59,6 +65,14 @@ CLIENTS = set()
 DETECTOR = None
 BOOST = None
 HISTORY = []  # snapshots for undo
+GAME_PROFILE = None
+
+try:
+    import layout as _layout
+    import profile as _profile
+except ImportError as e:  # tests that copy only server.py still load
+    _layout = _profile = None
+    print("layout/profile modules unavailable:", e)
 
 
 def list_packs():
@@ -116,6 +130,101 @@ def build_id():
     return int(max(os.path.getmtime(os.path.join(ROOT, f)) for f in ("overlay.html", "overlay.js")))
 
 
+def _layout_fields():
+    if _layout is None:
+        return {
+            "display_layout": CFG.get("display_layout", "16:9"),
+            "game_rect": {"x": 0, "y": 0, "w": 1920, "h": 1080},
+            "canvas": {"w": 1920, "h": 1080},
+            "presets": ["16:9", "ultrawide-letterbox", "custom"],
+            "anchors": {},
+        }
+    preset = CFG.get("display_layout", "16:9")
+    try:
+        preset = _layout.normalize_layout(preset)
+    except _layout.LayoutError:
+        preset = "16:9"
+    custom = CFG.get("game_rect") if preset == "custom" else None
+    try:
+        return _layout.layout_public(preset, custom)
+    except _layout.LayoutError:
+        return _layout.layout_public("16:9")
+
+
+def _apply_detect_profile(prof):
+    try:
+        import wardogs_detect as wd
+        wd.apply_detect_profile(prof)
+    except Exception:
+        pass
+
+
+def load_active_game():
+    """Load CFG['game'] from hud/games/. Falls back to wardogs. Safe to call repeatedly."""
+    global GAME_PROFILE
+    if _profile is None:
+        GAME_PROFILE = None
+        return None
+    gid = CFG.get("game") or "wardogs"
+    try:
+        GAME_PROFILE = _profile.load_game(gid)
+    except _profile.ProfileError as e:
+        print("game profile:", e)
+        GAME_PROFILE = None
+        if gid != "wardogs":
+            try:
+                GAME_PROFILE = _profile.load_game("wardogs")
+                CFG["game"] = "wardogs"
+            except _profile.ProfileError:
+                GAME_PROFILE = None
+    if GAME_PROFILE:
+        _apply_detect_profile(GAME_PROFILE)
+        if GAME_PROFILE.get("game_exe"):
+            CFG["game_exe"] = GAME_PROFILE["game_exe"]
+    return GAME_PROFILE
+
+
+def set_display_layout(preset, custom=None):
+    if _layout is None:
+        raise RuntimeError("layout module unavailable")
+    preset = _layout.normalize_layout(preset)
+    CFG["display_layout"] = preset
+    if preset == "custom":
+        CFG["game_rect"] = _layout.game_rect("custom", custom or CFG.get("game_rect"))
+    save_cfg()
+    evt = {"type": "layout", "state": public()}
+    evt.update(_layout_fields())
+    broadcast(evt)
+    return public()
+
+
+def set_game(game_id):
+    global GAME_PROFILE
+    if _profile is None:
+        raise RuntimeError("profile module unavailable")
+    GAME_PROFILE = _profile.load_game(game_id)
+    CFG["game"] = GAME_PROFILE["id"]
+    if GAME_PROFILE.get("game_exe"):
+        CFG["game_exe"] = GAME_PROFILE["game_exe"]
+    save_cfg()
+    _apply_detect_profile(GAME_PROFILE)
+    if DETECTOR is not None:
+        try:
+            DETECTOR.use_profile(GAME_PROFILE)
+        except Exception as e:
+            print("detector profile switch:", e)
+    broadcast({
+        "type": "game",
+        "game": CFG["game"],
+        "profile": _profile.public_profile(GAME_PROFILE),
+        "state": public(),
+    })
+    return public()
+
+
+load_active_game()
+
+
 def public():
     s = dict(STATE)
     s["kd"] = round(s["kills"] / max(1, s["deaths"]), 2)
@@ -133,6 +242,12 @@ def public():
     else:
         s["cash_delta"] = None
         s["cash_raw_delta"] = None
+    s.update(_layout_fields())
+    s["game"] = CFG.get("game", "wardogs")
+    if _profile and GAME_PROFILE:
+        s["profile"] = _profile.public_profile(GAME_PROFILE)
+    else:
+        s["profile"] = {"id": s["game"], "name": s["game"]}
     return s
 
 
@@ -482,6 +597,42 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, json.dumps({"overlay_sounds": bool(CFG.get("overlay_sounds", True))}))
         if p == "/api/boost":
             return self._send(200, json.dumps(BOOST.status if BOOST else {"active": False, "error": "game_boost off"}))
+        if p == "/api/layout" or p.startswith("/api/layout/"):
+            rest = p[len("/api/layout"):].strip("/")
+            if rest:
+                slug = unquote(rest)
+                try:
+                    if slug in ("custom",):
+                        def _n(key, default):
+                            try:
+                                return int(float((qs.get(key) or [default])[0]))
+                            except (TypeError, ValueError):
+                                raise ValueError(key)
+                        custom = {
+                            "x": _n("x", 0), "y": _n("y", 0),
+                            "w": _n("w", 1920), "h": _n("h", 1080),
+                        }
+                        body = set_display_layout("custom", custom)
+                    else:
+                        body = set_display_layout(slug)
+                except Exception as e:
+                    return self._send(400, json.dumps({"error": str(e)}))
+                return self._send(200, json.dumps(body))
+            return self._send(200, json.dumps(_layout_fields()))
+        if p == "/api/games":
+            games = _profile.list_games() if _profile else []
+            return self._send(200, json.dumps({"active": CFG.get("game", "wardogs"), "games": games}))
+        if p == "/api/game" or p.startswith("/api/game/"):
+            rest = unquote(p[len("/api/game"):].strip("/"))
+            if rest:
+                try:
+                    body = set_game(rest)
+                except Exception as e:
+                    return self._send(400, json.dumps({"error": str(e)}))
+                return self._send(200, json.dumps(body))
+            games = _profile.list_games() if _profile else []
+            return self._send(200, json.dumps({"active": CFG.get("game", "wardogs"), "games": games,
+                                               "profile": (_profile.public_profile(GAME_PROFILE) if _profile else None)}))
         if p == "/api/state":
             return self._send(200, json.dumps(public()))
         if p == "/api/sounds":
@@ -563,9 +714,12 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         CLIENTS.add(q)
         try:
-            hello = json.dumps({"type": "hello", "build": build_id(), "state": public(),
+            st = public()
+            hello = json.dumps({"type": "hello", "build": build_id(), "state": st,
                                 "overlay_sounds": bool(CFG.get("overlay_sounds", True)),
-                                "theme": CFG.get("overlay_theme", "protocol")})
+                                "theme": CFG.get("overlay_theme", "protocol"),
+                                "display_layout": st.get("display_layout"),
+                                "game": st.get("game")})
             self.wfile.write(("retry: 1500\ndata: " + hello + "\n\n").encode("utf-8"))
             self.wfile.flush()
             while True:
@@ -662,7 +816,10 @@ if __name__ == "__main__":
                 apply(ev)
             else:
                 broadcast({"type": ev, "state": public()})
-        DETECTOR = AutoDetect(emit, CFG.get("game_exe", "WardogsClient-Win64-Shipping.exe"), CFG.get("detect_fps", 4))
+        DETECTOR = AutoDetect(emit, CFG.get("game_exe", "WardogsClient-Win64-Shipping.exe"),
+                              CFG.get("detect_fps", 4), cfg=CFG)
+        if GAME_PROFILE:
+            DETECTOR.use_profile(GAME_PROFILE)
         DETECTOR.start()
     if CFG.get("game_boost", True) and sys.platform == "win32":
         try:

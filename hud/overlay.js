@@ -213,8 +213,54 @@
 
   // ---------------- UI helpers ----------------
   const MULTI = { 2: "DOUBLE", 3: "TRIPLE", 4: "QUAD" };
-  const SPREE = { 5: "LETHAL", 8: "RELENTLESS", 12: "UNTOUCHABLE", 20: "APEX" };
   const COLORS = { kill: "var(--kill)", death: "var(--death)", win: "var(--win)", info: "#9fb3c8", revive: "#4be3a0" };
+
+  function place(el, spec) {
+    if (!el || !spec) return;
+    for (const k of ["left", "right", "top", "bottom"]) {
+      if (k in spec) el.style[k] = spec[k] == null ? "auto" : spec[k] + "px";
+    }
+  }
+  function applyLayout(st) {
+    if (!st) return;
+    const preset = st.display_layout || "16:9";
+    document.body.classList.remove("preset-16-9", "preset-ultrawide-letterbox", "preset-custom");
+    document.body.classList.add("preset-" + String(preset).replace(":", "-"));
+    const anchors = (st.anchors && st.anchors[POS]) || (st.hud_anchors);
+    if (!anchors) return;
+    place($("hud"), anchors.hud);
+    place($("cashbox"), anchors.cashbox);
+    place($("callout"), anchors.callout);
+    place($("kia"), anchors.kia);
+  }
+  function applyProfile(p) {
+    if (!p) return;
+    if (p.colors) {
+      Object.entries(p.colors).forEach(([k, v]) => document.body.style.setProperty("--" + k, v));
+    }
+    if (p.banner) {
+      const brand = document.querySelector(".brand");
+      if (brand) {
+        let dot = brand.querySelector(".dot");
+        brand.textContent = "";
+        if (!dot) { dot = document.createElement("span"); dot.className = "dot"; }
+        brand.appendChild(dot);
+        brand.appendChild(document.createTextNode(p.banner));
+      }
+    }
+    const names = p.stat_names || {};
+    [["tk", "kills"], ["td", "deaths"], ["tw", "wins"], ["tc", "cash"]].forEach(([id, key]) => {
+      const lbl = $(id) && $(id).querySelector(".lbl");
+      if (lbl && names[key]) lbl.textContent = names[key];
+    });
+    if (p.banners) Object.assign(BANNERS, p.banners);
+    const kiaT = $("kia") && $("kia").querySelector(".t");
+    if (kiaT && BANNERS.death) { kiaT.textContent = BANNERS.death; kiaT.setAttribute("data-t", BANNERS.death); }
+    if (p.sprees) {
+      SPREE_LABELS = {};
+      Object.entries(p.sprees).forEach(([k, v]) => { SPREE_LABELS[Number(k)] = v; });
+    }
+  }
 
   function restart(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
 
@@ -262,6 +308,8 @@
     },
   };
   let THEME = "protocol";
+  let BANNERS = { kill: "KILL CONFIRMED", death: "K.I.A.", win: "VICTORY", win_tag: "MATCH COMPLETE", downed: "DOWNED", revived: "REVIVED" };
+  let SPREE_LABELS = { 5: "LETHAL", 8: "RELENTLESS", 12: "UNTOUCHABLE", 20: "APEX" };
   function cvar(name) { return getComputedStyle(document.body).getPropertyValue(name).trim() || "#ffffff"; }
   function setTheme(name) {
     if (!THEMES.includes(name)) name = "protocol";
@@ -357,10 +405,10 @@
     const [x, y] = centerOf($("tk"));
     spawn(x, y, 14, [cvar("--kill"), "#ffffff"], 6, 0.22, 0, 0.4);
     const multi = st.multi || 1, streak = st.streak || 1;
-    const title = multi >= 5 ? "MULTI KILL" : (MULTI[multi] ? MULTI[multi] + " KILL" : "KILL CONFIRMED");
+    const title = multi >= 5 ? "MULTI KILL" : (MULTI[multi] ? MULTI[multi] + " KILL" : (BANNERS.kill || "KILL CONFIRMED"));
     pop("kill", title, streak >= 2 ? `STREAK ${streak}` : "ENEMY DOWN", "+1");
-    if (SPREE[streak]) {
-      callout(SPREE[streak], `${streak} KILL STREAK`, "kill");
+    if (SPREE_LABELS[streak]) {
+      callout(SPREE_LABELS[streak], `${streak} KILL STREAK`, "kill");
       play("spree", () => SYNTH.spree());
     } else if (multi >= 3) {
       callout(multi >= 5 ? "MULTI KILL" : MULTI[multi] + " KILL", `${multi} RAPID KILLS`, "kill");
@@ -383,7 +431,7 @@
       $("kia").querySelector(".s").textContent = sub;
       restart($("kia"), "on");
     } else {
-      pop("death", "K.I.A.", sub, "", 3200);
+      pop("death", BANNERS.death || "K.I.A.", sub, "", 3200);
     }
     play("death", () => SYNTH.death());
   }
@@ -396,10 +444,12 @@
     if (WINFX !== "full" || !SHOW_BIG) {
       const [x, y] = centerOf($("tw"));
       spawn(x, y, 22, gold, 6, 0.12, Math.PI * 0.9, 0.45);
-      pop("win", "VICTORY", `WIN #${st.wins} · ${st.kills} KILLS`, "+1", 4500);
+      pop("win", BANNERS.win || "VICTORY", `WIN #${st.wins} · ${st.kills} KILLS`, "+1", 4500);
       play("win", () => SYNTH.win());
       return;
     }
+    $("win").querySelector(".tag").textContent = BANNERS.win_tag || "MATCH COMPLETE";
+    $("win").querySelector(".wt").textContent = BANNERS.win || "VICTORY";
     $("win").querySelector(".ws").textContent = `WIN #${st.wins}  ·  ${st.kills} KILLS  ·  K/D ${Number(st.kd).toFixed(2)}`;
     {
       restart($("win"), "on");
@@ -416,7 +466,15 @@
         window.__build = evt.build;
         if (typeof evt.overlay_sounds === "boolean") SERVER_SOUND = evt.overlay_sounds;
         if (!Q.get("theme") && evt.theme && evt.theme !== THEME) setTheme(evt.theme);
+        applyLayout(evt.state);
+        applyProfile(evt.state && evt.state.profile);
         render(evt.state, false);
+        break;
+      case "layout":
+        applyLayout(evt.state || evt);
+        break;
+      case "game":
+        applyProfile((evt.state && evt.state.profile) || evt.profile);
         break;
       case "undo": render(evt.state, false); break;
       case "kill": onKill(evt); break;
@@ -428,11 +486,11 @@
         pop("info", "NEW SESSION", evt.auto ? "AUTO RESET" : "COUNTERS ZEROED", "0", 3200);
         break;
       case "downed":
-        pop("death", "DOWNED", "AWAITING REVIVE", "", 3500);
+        pop("death", BANNERS.downed || "DOWNED", "AWAITING REVIVE", "", 3500);
         play("downed");
         break;
       case "revived":
-        pop("revive", "REVIVED", "BACK IN THE FIGHT", "", 2600);
+        pop("revive", BANNERS.revived || "REVIVED", "BACK IN THE FIGHT", "", 2600);
         play("revived");
         break;
       case "soundpack":
@@ -453,6 +511,6 @@
     es.onmessage = (m) => { try { handle(JSON.parse(m.data)); } catch (e) { console.error(e); } };
     es.onerror = () => { /* EventSource retries on its own */ };
   }
-  fetch("/api/state").then((r) => r.json()).then((st) => render(st, false)).catch(() => {});
+  fetch("/api/state").then((r) => r.json()).then((st) => { applyLayout(st); applyProfile(st.profile); render(st, false); }).catch(() => {});
   connect();
 })();

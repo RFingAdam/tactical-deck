@@ -44,6 +44,8 @@ button:active{transform:translateY(1px)}
 .preview iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
 code{display:block;background:#0f1218;border:1px solid var(--line);padding:8px 10px;margin:6px 0;font-size:13px;color:#cfe3ff;word-break:break-all;cursor:pointer}
 .hint{color:var(--mute);font-size:13px;line-height:1.55}
+label.xy{display:flex;flex-direction:column;gap:4px;font-size:11px;letter-spacing:.2em;color:var(--mute)}
+label.xy input{font:inherit;color:var(--ink);background:#0f1218;border:1px solid var(--line);padding:8px 10px;width:110px}
 kbd{background:#0f1218;border:1px solid var(--line);padding:1px 6px;font-family:inherit;font-size:12px}
 #toast{position:fixed;right:18px;bottom:18px;background:#1b212c;border:1px solid var(--line);padding:10px 14px;opacity:0;transition:opacity .2s}
 #toast.on{opacity:1}
@@ -76,10 +78,15 @@ kbd{background:#0f1218;border:1px solid var(--line);padding:1px 6px;font-family:
       </div>
     </div>
     <div class="card" style="margin-top:20px">
-      <h2>AUTO-DETECT (WARDOGS SCREEN READER)</h2>
+      <h2>GAME</h2>
+      <div class="row" id="games"></div>
+      <div class="hint" style="margin-top:10px" id="game-hint">Profiles live in hud/games/. Switching applies live — no restart.</div>
+    </div>
+    <div class="card" style="margin-top:20px">
+      <h2>AUTO-DETECT (SCREEN READER)</h2>
       <div class="meta" style="flex-wrap:wrap;gap:14px"><span>STATUS <b id="ad-st">…</b></span><span>GAME <b id="ad-g">…</b></span><span>SCAN <b id="ad-f">0</b>/s</span><span>AUTO KILLS <b id="ad-k">0</b></span><span>AUTO DEATHS <b id="ad-d">0</b></span><span>LAST <b id="ad-l">—</b></span></div>
       <div class="row"><button id="ad-on">TURN ON</button><button id="ad-off">PAUSE</button></div>
-      <div class="hint" style="margin-top:8px">Reads "KILL CONFIRMED", the downed "GIVE UP / CALL FOR HELP" prompt, the VICTORY scoreboard and your cash balance (top right) straight off your screen while Wardogs is focused. Hotkeys still work to fix a miss (Ctrl+Alt+4 undoes).</div>
+      <div class="hint" style="margin-top:8px">Reads kill / down / death / win text off your screen while the selected game is focused. Pixels only — no memory reads. Hotkeys still work to fix a miss (Ctrl+Alt+4 undoes).</div>
     </div>
     <div class="card" style="margin-top:20px">
       <h2>SOUND PACK</h2>
@@ -104,6 +111,18 @@ kbd{background:#0f1218;border:1px solid var(--line);padding:1px 6px;font-family:
     </div>
   </section>
   <section>
+    <div class="card" style="margin-bottom:20px">
+      <h2>DISPLAY LAYOUT</h2>
+      <div class="themes" id="layouts"></div>
+      <div id="custom-rect" class="row" style="margin-top:12px;display:none;align-items:flex-end">
+        <label class="xy">X <input id="gx" type="number" min="0" max="1920" step="1"></label>
+        <label class="xy">Y <input id="gy" type="number" min="0" max="1080" step="1"></label>
+        <label class="xy">W <input id="gw" type="number" min="64" max="1920" step="1"></label>
+        <label class="xy">H <input id="gh" type="number" min="64" max="1080" step="1"></label>
+        <button id="apply-custom">APPLY GAME RECT</button>
+      </div>
+      <div class="hint" style="margin-top:10px"><b>16:9</b> is the default for a full-frame monitor. <b>Ultrawide letterbox</b> is the original SwampBewdy layout (game in the middle, HUD in the black bars). <b>Custom</b> sets the game rectangle on the 1920×1080 canvas. Every HUD tile and the OCR kill-feed crops follow that rect.</div>
+    </div>
     <div class="card" style="margin-bottom:20px">
       <h2>OVERLAY THEME</h2>
       <div class="themes" id="themes"></div>
@@ -159,7 +178,7 @@ setUrl();
  function stop(){cancelAnimationFrame(raf);f.style.width="0"}
  r.addEventListener("pointerdown",()=>{t0=performance.now();raf=requestAnimationFrame(tick)});
  ["pointerup","pointerleave"].forEach(e=>r.addEventListener(e,stop));})();
-function ad(path){fetch(path||"/api/detector").then(r=>r.json()).then(s=>{$("ad-st").textContent=s.error?"ERROR":(s.enabled?"ON":"PAUSED");$("ad-st").style.color=s.error?"#ff6b6b":(s.enabled?"#3ddc84":"#ffc93c");$("ad-g").textContent=s.game_focused?"WARDOGS FOCUSED":"NOT IN GAME";$("ad-f").textContent=s.fps||0;$("ad-k").textContent=s.kills||0;$("ad-d").textContent=s.deaths||0;$("ad-l").textContent=s.last_event?s.last_event.join(" @ "):"—";if(s.error)$("ad-st").title=s.error}).catch(()=>{})}
+function ad(path){fetch(path||"/api/detector").then(r=>r.json()).then(s=>{$("ad-st").textContent=s.error?"ERROR":(s.enabled?"ON":"PAUSED");$("ad-st").style.color=s.error?"#ff6b6b":(s.enabled?"#3ddc84":"#ffc93c");$("ad-g").textContent=s.game_focused?(GAME_NAME+" FOCUSED"):"NOT IN GAME";$("ad-f").textContent=s.fps||0;$("ad-k").textContent=s.kills||0;$("ad-d").textContent=s.deaths||0;$("ad-l").textContent=s.last_event?s.last_event.join(" @ "):"—";if(s.error)$("ad-st").title=s.error}).catch(()=>{})}
 $("ad-on").onclick=()=>ad("/api/detector/on");$("ad-off").onclick=()=>ad("/api/detector/off");ad();setInterval(ad,2000);
 const THEMES=[["protocol","PROTOCOL","Angled glass plates, neon accents","#ff5a2a"],["fieldkit","FIELD KIT","Matches the game's menu boxes","#e8a33d"],
  ["nvg","NIGHT VISION","Green phosphor, scanlines","#8dff7a"],["stencil","STENCIL OPS","Olive drab, stencil type","#a5d65f"],["killfeed","KILLFEED","No plates, most minimal","#ffffff"]];
@@ -168,6 +187,29 @@ function drawThemes(){const w=$("themes");w.innerHTML="";THEMES.forEach(([id,nam
   b.style.setProperty("--sw",sw);b.className=id===THEME?"on":"";b.innerHTML="<b></b><small></small>";b.querySelector("b").textContent=name+(id===THEME?"  ✓":"");
   b.querySelector("small").textContent=desc;b.onclick=()=>fetch("/api/theme/"+id,{method:"POST"}).then(r=>r.json()).then(d=>{THEME=d.theme;drawThemes();toast("overlay now "+name)}).catch(()=>toast("server offline"));w.appendChild(b)})}
 fetch("/api/theme").then(r=>r.json()).then(d=>{THEME=d.theme;drawThemes()}).catch(()=>{});
+const LAYOUTS=[["16:9","16:9","Full-frame monitor. HUD sits on the game, clear of kill feed / minimap / ammo.","#5fa8ff"],
+ ["ultrawide-letterbox","ULTRAWIDE LETTERBOX","21:9 or 32:9 game inside a 16:9 canvas. Today's SwampBewdy layout.","#ffc93c"],
+ ["custom","CUSTOM","Set the game rect (x, y, w, h) on the 1920×1080 canvas.","#62c04e"]];
+let LAYOUT="16:9", GAME_RECT={x:0,y:0,w:1920,h:1080}, GAME_ID="wardogs", GAME_NAME="Wardogs", GAMES=[];
+function fillCustom(r){if(!r)return;$("gx").value=r.x;$("gy").value=r.y;$("gw").value=r.w;$("gh").value=r.h}
+function drawLayouts(){const w=$("layouts");w.innerHTML="";LAYOUTS.forEach(([id,name,desc,sw])=>{const b=document.createElement("button");
+  b.style.setProperty("--sw",sw);b.className=id===LAYOUT?"on":"";b.innerHTML="<b></b><small></small>";b.querySelector("b").textContent=name+(id===LAYOUT?"  ✓":"");
+  b.querySelector("small").textContent=desc;b.onclick=()=>{if(id==="custom"){$("custom-rect").style.display="flex";LAYOUT=id;drawLayouts();return}
+    fetch("/api/layout/"+encodeURIComponent(id),{method:"POST"}).then(r=>r.json()).then(applyLayoutState).then(()=>toast("layout "+name)).catch(()=>toast("server offline"))};
+  w.appendChild(b)});
+  $("custom-rect").style.display=LAYOUT==="custom"?"flex":"none"}
+function applyLayoutState(d){if(!d)return;LAYOUT=d.display_layout||LAYOUT;if(d.game_rect){GAME_RECT=d.game_rect;fillCustom(d.game_rect)}drawLayouts();setUrl()}
+$("apply-custom").onclick=()=>{const q=`x=${+$("gx").value}&y=${+$("gy").value}&w=${+$("gw").value}&h=${+$("gh").value}`;
+  fetch("/api/layout/custom?"+q,{method:"POST"}).then(r=>r.json()).then(d=>{if(d.error){toast(d.error);return}applyLayoutState(d);toast("custom game rect applied")}).catch(()=>toast("server offline"))};
+function drawGames(){const w=$("games");w.innerHTML="";
+  GAMES.forEach(g=>{const b=document.createElement("button");const bad=!!g.error;b.textContent=(g.name||g.id).toUpperCase()+(g.id===GAME_ID?"  ✓":"");
+    if(g.id===GAME_ID)b.style.borderColor="#3ddc84";if(bad){b.style.borderColor="#ff6b6b";b.title=g.error;b.onclick=()=>toast(g.error);w.appendChild(b);return}
+    b.onclick=()=>fetch("/api/game/"+encodeURIComponent(g.id),{method:"POST"}).then(r=>r.json()).then(d=>{if(d.error){toast(d.error);return}applyGameState(d);toast("game "+(d.profile&&d.profile.name||g.name))}).catch(()=>toast("server offline"));
+    w.appendChild(b)});
+  $("game-hint").textContent=GAME_NAME+" profile is live. Switching applies immediately — overlay labels, colours and OCR regions change without a restart."}
+function applyGameState(d){if(!d)return;if(d.game)GAME_ID=d.game;if(d.profile&&d.profile.name)GAME_NAME=d.profile.name;if(d.games)GAMES=d.games;drawGames();ad()}
+fetch("/api/layout").then(r=>r.json()).then(applyLayoutState).catch(()=>{});
+fetch("/api/games").then(r=>r.json()).then(d=>{GAMES=d.games||[];GAME_ID=d.active||GAME_ID;const cur=(GAMES.find(g=>g.id===GAME_ID)||{});GAME_NAME=cur.name||GAME_ID;drawGames()}).catch(()=>{});
 let PACKS={},ACTIVE="";
 function drawPacks(){const w=$("packs");w.innerHTML="";
  [...Object.keys(PACKS),"synth"].forEach(n=>{const b=document.createElement("button");b.textContent=n.toUpperCase()+(n===ACTIVE?"  ✓":"");
@@ -182,7 +224,9 @@ es.onopen=()=>$("live").classList.add("on");
 es.onerror=()=>$("live").classList.remove("on");
 es.onmessage=(m)=>{const e=JSON.parse(m.data);if(e.type==="armreset"){toast("press Ctrl+Alt+0 again to reset");return}
  if(e.type==="theme"){THEME=e.name;drawThemes();return}if(e.type==="hello"&&e.theme&&e.theme!==THEME){THEME=e.theme;drawThemes()}
- if(e.state&&!e.test)render(e.state)};
+ if(e.type==="layout"){applyLayoutState(e.state||e);return}
+ if(e.type==="game"){applyGameState(e.state||e);return}
+ if(e.state&&!e.test){render(e.state);if(e.state.display_layout)applyLayoutState(e.state);if(e.state.game){GAME_ID=e.state.game;if(e.state.profile&&e.state.profile.name)GAME_NAME=e.state.profile.name;drawGames()}}};
 </script>
 </body>
 </html>
