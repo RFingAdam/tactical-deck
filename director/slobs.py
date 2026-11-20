@@ -63,7 +63,7 @@ class StreamlabsDucker:
         try:
             import websocket  # websocket-client
             ws = websocket.create_connection(
-                f"ws://127.0.0.1:{int(self.cfg.get('port', 59650))}/api/000/tacticaldeck/websocket", timeout=5)
+                f"ws://{self.cfg.get('host', '127.0.0.1')}:{int(self.cfg.get('port', 59650))}/api/000/tacticaldeck/websocket", timeout=5)
             if ws.recv() != "o":
                 raise RuntimeError("unexpected Streamlabs transport")
             self.ws = ws
@@ -120,6 +120,20 @@ class StreamlabsDucker:
                 return float(src["fader"]["mul"])
         raise RuntimeError("duck source disappeared")
 
+    def _retry(self, fn):
+        """Run fn(); if the socket died (Streamlabs restarted mid-session), reconnect once right away and run it again.
+        Oct 31: the Director kept a dead socket after Streamlabs restarts, so every duck since Oct 23 failed with
+        'Connection to remote host was lost' and the game was never ducked under sound effects."""
+        try:
+            return fn()
+        except Exception as e:
+            self._drop(None)
+            self._next_try = 0.0
+            if not self._connect():
+                raise
+            LOG.info("streamlabs: reconnected (%s)", e)
+            return fn()
+
     def _ramp(self, start: float, end: float, ms: float, steps: int):
         steps = max(1, steps)
         for i in range(1, steps + 1):
@@ -135,12 +149,14 @@ class StreamlabsDucker:
             if not self._connect():
                 return False
             try:
-                self._find_source()
-                base = self._current_mul()
-                self.base_mul = base
-                STATE.write_text(json.dumps({"resource": self.resource, "base_mul": base}))
-                target = base * 10 ** (float(dcfg.get("stream_db", -8)) / 20)
-                self._ramp(base, target, float(dcfg.get("stream_attack_ms", 60)), 3)
+                def go():
+                    self._find_source()
+                    if self.base_mul is None:          # keep the un-ducked level until a release succeeds
+                        self.base_mul = self._current_mul()
+                        STATE.write_text(json.dumps({"resource": self.resource, "base_mul": self.base_mul}))
+                    target = self.base_mul * 10 ** (float(dcfg.get("stream_db", -8)) / 20)
+                    self._ramp(self._current_mul(), target, float(dcfg.get("stream_attack_ms", 60)), 3)
+                self._retry(go)
                 return True
             except Exception as e:
                 self._drop(str(e))
@@ -156,10 +172,13 @@ class StreamlabsDucker:
                 if self.base_mul is None:
                     st = json.loads(STATE.read_text())
                     self.resource, self.base_mul = st["resource"], float(st["base_mul"])
-                self._find_source()
-                cur = self._current_mul()
-                steps = 2 if force else 6
-                self._ramp(cur, self.base_mul, 0 if force else float(dcfg.get("stream_release_ms", 450)), steps)
+
+                def go():
+                    self._find_source()
+                    cur = self._current_mul()
+                    steps = 2 if force else 6
+                    self._ramp(cur, self.base_mul, 0 if force else float(dcfg.get("stream_release_ms", 450)), steps)
+                self._retry(go)
                 self.base_mul = None
                 STATE.unlink(missing_ok=True)
             except Exception as e:
