@@ -1,10 +1,20 @@
 """Background thread: watches the Wardogs window and emits kill/death events automatically.
 Only reads the screen while the game is the focused window; idles otherwise."""
-import ctypes, os, threading, time, traceback
+import ctypes, os, sys, threading, time, traceback
 from ctypes import wintypes
 
-user32 = ctypes.windll.user32
-kernel32 = ctypes.windll.kernel32
+user32 = kernel32 = None
+if sys.platform == "win32":
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+
+# dxcam.grab() returns None when the desktop has not changed. Reusing the last
+# frame is fine for a short moment; past this we must not keep serving it
+# (DXGI 0x887A0026 left the HUD frozen on a stale frame).
+REUSE_MAX_S = 2.0
+STALE_REINIT_S = 5.0
+DXCAM_RETRY_S = 15.0
+DXGI_ACCESS_LOST = 0x887A0026
 
 
 def foreground_exe():
@@ -32,6 +42,43 @@ def window_rect(hwnd):
     return {"left": r.left, "top": r.top, "width": r.right - r.left, "height": r.bottom - r.top}
 
 
+
+def is_access_lost(exc):
+    text = str(exc).lower()
+    if "887a0026" in text or "access loss" in text or "accesslost" in text:
+        return True
+    for a in getattr(exc, "args", ()):
+        try:
+            if (int(a) & 0xFFFFFFFF) == DXGI_ACCESS_LOST:
+                return True
+        except (TypeError, ValueError):
+            continue
+    hr = getattr(exc, "hresult", None)
+    try:
+        if hr is not None and (int(hr) & 0xFFFFFFFF) == DXGI_ACCESS_LOST:
+            return True
+    except (TypeError, ValueError):
+        pass
+    return False
+
+
+def classify_frame(now, last_fresh_ts, got_frame, access_lost=False,
+                   reuse_max_s=REUSE_MAX_S, stale_s=STALE_REINIT_S):
+    """Decide what to do with a dxcam grab result: fresh, reuse, skip, or reinit."""
+    if access_lost:
+        return "reinit"
+    if got_frame:
+        return "fresh"
+    if last_fresh_ts is None:
+        return "reinit"
+    age = now - last_fresh_ts
+    if age <= reuse_max_s:
+        return "reuse"
+    if age >= stale_s:
+        return "reinit"
+    return "skip"
+
+
 class NpFrame:
     """Lazy RGB view over a BGRA screen grab: only the regions the detector actually crops get converted
     (the old path converted the whole 3440x1440 frame to RGB every tick)."""
@@ -50,49 +97,150 @@ class NpFrame:
 class Capture:
     """Screen capture for the detector. Oct 18: Desktop Duplication (dxcam) instead of a GDI BitBlt of the whole
     game window - the GDI grab took ~77 ms (up to 142 ms) four times a second and stalls the compositor (hitches);
-    dxcam takes ~14 ms. Falls back to the old mss/GDI grab if Desktop Duplication isn't available."""
+    dxcam takes ~14 ms. Falls back to the old mss/GDI grab if Desktop Duplication isn't available.
+
+    Nov 20: do not reuse a stale last-frame forever when dxcam returns None or loses the output
+    (HRESULT 0x887A0026). Re-create the camera after STALE_REINIT_S, expose stale on /health, and
+    skip detection rather than feed an old frame to the OCR loop."""
 
     def __init__(self):
-        self.cam, self.last, self.retry_at = None, None, 0.0
+        self.cam = None
+        self.last = None
+        self.retry_at = 0.0
         self.gdi = None
+        self.out = (0, 0)
+        self.last_fresh_ts = None
+        self.stale = False
+        self.backend = "none"
+        self.last_error = None
+        self.reinit_count = 0
+        self.opened_at = time.time()
         self._open()
 
+    def health(self, capturing=False):
+        now = time.time()
+        age = None if self.last_fresh_ts is None else round(now - self.last_fresh_ts, 2)
+        stale = bool(capturing and (
+            self.last_fresh_ts is None or (now - self.last_fresh_ts) >= STALE_REINIT_S
+        ))
+        self.stale = stale
+        return {
+            "backend": self.backend,
+            "capturing": bool(capturing),
+            "stale": stale,
+            "last_fresh_age_s": age,
+            "last_error": self.last_error,
+            "reinit_count": self.reinit_count,
+        }
+
+    def _release_cam(self):
+        cam = self.cam
+        self.cam = None
+        if cam is None:
+            return
+        try:
+            cam.release()
+        except Exception:
+            pass
+
     def _open(self):
+        self._release_cam()
         try:
             import dxcam
             self.cam = dxcam.create(device_idx=0, output_idx=0, output_color="BGRA")
             self.out = (self.cam.width, self.cam.height)
+            self.backend = "dxcam"
+            self.last_error = None
+            self.opened_at = time.time()
         except Exception as e:
             self.cam = None
-            self.retry_at = time.time() + 30
+            self.backend = "gdi"
+            self.retry_at = time.time() + DXCAM_RETRY_S
+            self.last_error = str(e)
             print("capture: Desktop Duplication unavailable, using GDI for now:", e, flush=True)
+
+    def _reopen(self, reason):
+        self.reinit_count += 1
+        self.last = None
+        print("capture: reopening Desktop Duplication (%s, attempt %s)" % (reason, self.reinit_count), flush=True)
+        self._open()
+        if self.cam is None:
+            self.stale = True
+            self.retry_at = time.time() + DXCAM_RETRY_S
+            return False
+        return True
 
     def grab(self, rect):
         l, t = rect["left"], rect["top"]
         r, b = l + rect["width"], t + rect["height"]
-        if self.cam is None and time.time() >= self.retry_at:
-            self._open()
+        now = time.time()
+        if self.cam is None and now >= self.retry_at:
+            self._reopen("scheduled retry")
+            now = time.time()
         if self.cam is not None and l >= 0 and t >= 0 and r <= self.out[0] and b <= self.out[1]:
+            access_lost = False
+            frame = None
+            err = None
             try:
-                f = self.cam.grab(region=(l, t, r, b))
-                if f is None and self.last is not None and self.last.shape[:2] == (b - t, r - l):
-                    f = self.last  # no new frame since the last grab (screen unchanged)
-                if f is not None:
-                    self.last = f
-                    return NpFrame(f)
+                frame = self.cam.grab(region=(l, t, r, b))
             except Exception as e:
-                print("capture: Desktop Duplication error, falling back to GDI:", e, flush=True)
-                try:
-                    self.cam.release()
-                except Exception:
-                    pass
-                self.cam, self.retry_at = None, time.time() + 10
+                err = e
+                access_lost = is_access_lost(e)
+                self.last_error = str(e)
+                print("capture: Desktop Duplication error:", e, flush=True)
+            action = classify_frame(now, self.last_fresh_ts, frame is not None, access_lost=access_lost)
+            if action == "fresh":
+                self.last = frame
+                self.last_fresh_ts = now
+                self.stale = False
+                self.last_error = None
+                self.backend = "dxcam"
+                return NpFrame(frame)
+            if action == "reuse" and self.last is not None and self.last.shape[:2] == (b - t, r - l):
+                return NpFrame(self.last)
+            if action == "reinit":
+                reason = "access lost" if access_lost else (
+                    "error" if err is not None else "no fresh frame for %.1fs" % (
+                        0 if self.last_fresh_ts is None else now - self.last_fresh_ts
+                    )
+                )
+                self.stale = True
+                self.last = None
+                if not self._reopen(reason):
+                    pass  # fall through to GDI
+                elif self.cam is not None:
+                    try:
+                        frame = self.cam.grab(region=(l, t, r, b))
+                    except Exception as e:
+                        self.last_error = str(e)
+                        frame = None
+                        print("capture: Desktop Duplication still failing after reopen:", e, flush=True)
+                    if frame is not None:
+                        self.last = frame
+                        self.last_fresh_ts = time.time()
+                        self.stale = False
+                        self.last_error = None
+                        self.backend = "dxcam"
+                        return NpFrame(frame)
+            else:
+                # skip: too old to reuse, not yet long enough to reinit
+                return None
         import mss
         from PIL import Image
         if self.gdi is None:
             self.gdi = (getattr(mss, "MSS", None) or mss.mss)()
-        shot = self.gdi.grab(rect)
-        return Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
+        try:
+            shot = self.gdi.grab(rect)
+            img = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
+            self.backend = "gdi" if self.cam is None else self.backend
+            self.last_fresh_ts = time.time()
+            self.stale = False
+            return img
+        except Exception as e:
+            self.last_error = "gdi: %s" % e
+            self.stale = True
+            print("capture: GDI grab failed:", e, flush=True)
+            return None
 
 
 class AutoDetect(threading.Thread):
@@ -104,6 +252,7 @@ class AutoDetect(threading.Thread):
         self.enabled = enabled
         self.cfg = cfg if cfg is not None else {}
         self._pending_profile = None
+        self.capture = None
         self.status = {"enabled": enabled, "running": False, "game_focused": False, "fps": 0.0,
                        "kills": 0, "deaths": 0, "wins": 0, "last_event": None, "error": None}
 
@@ -121,6 +270,7 @@ class AutoDetect(threading.Thread):
             self.status["error"] = f"auto-detect unavailable: {e}"
             return
         grabber = Capture()
+        self.capture = grabber
         det = wd.Detector()
         try:
             from server_watch import ServerWatch   # Wardogs server ID -> Stream Keeper (rejoin after a crash)
@@ -147,19 +297,26 @@ class AutoDetect(threading.Thread):
                     self.game_exe = (pending.get("game_exe") or "").lower()
                     self._pending_profile = None
                 if not self.enabled:
+                    self.status["capture"] = grabber.health(capturing=False)
                     time.sleep(0.5)
                     continue
                 hwnd, exe = foreground_exe()
                 focused = bool(self.game_exe) and exe == self.game_exe
                 self.status["game_focused"] = focused
                 if not focused:
+                    self.status["capture"] = grabber.health(capturing=False)
                     time.sleep(0.5)
                     continue
                 rect = window_rect(hwnd)
                 if rect["width"] < 640 or rect["height"] < 360:
+                    self.status["capture"] = grabber.health(capturing=False)
                     time.sleep(0.5)
                     continue
                 frame = grabber.grab(rect)
+                self.status["capture"] = grabber.health(capturing=True)
+                if frame is None:
+                    time.sleep(max(0.0, self.period - (time.time() - t0)))
+                    continue
                 size = getattr(frame, "size", None) or (rect["width"], rect["height"])
                 try:
                     import layout as _layout
@@ -184,7 +341,8 @@ class AutoDetect(threading.Thread):
                 for ev in events:
                     if isinstance(ev, tuple):  # ("cash", balance) or ("cash", balance, how)
                         self.status[ev[0]] = ev[1]
-                        extra = f" how={ev[2]}" if len(ev) >= 3 else ""
+                        extra = (f" how={ev[2]}" if len(ev) >= 3 else "") + \
+                                (f" life={ev[3]}" if len(ev) >= 4 and ev[3] is not None else "")
                         print(time.strftime("%Y-%m-%d %H:%M:%S"), "auto:", ev[0], ev[1], extra, flush=True)
                         self.emit(ev)
                         continue
@@ -201,6 +359,8 @@ class AutoDetect(threading.Thread):
                 self.status["error"] = None
             except Exception as e:
                 self.status["error"] = str(e)
+                if self.capture is not None:
+                    self.status["capture"] = self.capture.health(capturing=True)
                 traceback.print_exc()
                 time.sleep(1)
             time.sleep(max(0.0, self.period - (time.time() - t0)))

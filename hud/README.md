@@ -8,7 +8,7 @@ Live Kills / Deaths / Wins overlay for Streamlabs that counts itself while you p
 - Log: `hud.log`
 
 ## In Streamlabs
-The source **"Protocol HUD"** sits at the top of **Live Scene** (DarkMode collection) with URL `http://127.0.0.1:8790/overlay?pos=bar`, so the tiles sit in the black letterbox strip above the game.
+The source **"Protocol HUD"** sits at the top of **Live Scene** with URL `http://127.0.0.1:8790/overlay?pos=bar`, so the tiles sit in the black letterbox strip above the game.
 Its audio goes to the stream only (it appears in the mixer as "Protocol HUD"). To hear it yourself, open Advanced Audio Properties and set monitoring to "Monitor and Output".
 
 URL options (combine with `&`):
@@ -56,7 +56,7 @@ Pause or resume it from the control panel, or set `auto_detect` to false in `con
 ## STREAM PROFIT
 `cash_delta = (cash_now - cash_start) + cash_invested`.
 
-One-time unlocks/buys are **invested** (not losses) when the drop is ≥ $5K, not within ~60s of a death/respawn, and either a menu OCR reading or a round-thousand amount. Per-life kits (~$16K after death) stay as costs in `cash_kits`.
+When the detector also reads the game's per-life money counter (the number left of the balance), unlocks are split from kits using that counter: kits and earnings move the counter and the balance together; unlocks move only the balance. If the counter is missing, the fallback is: a drop ≥ $5K that is a menu reading or a round amount is invested, and a large round drop (≥ $20K) is an unlock even on the deploy screen after a death. Odd kit amounts stay in `cash_kits`.
 
 Manual override: control-panel **Mark last drop invested** / hotkey Ctrl+Alt+5. Undo invest: Ctrl+Alt+6. APIs: `/api/cash/invest`, `/api/cash/invest/undo`.
 
@@ -68,8 +68,20 @@ Test animations without changing counts: `/api/test/kill?n=5`, `/api/test/death`
 ## New stream = zero
 Idle auto-reset is **off** by default (`new_session_after_hours: 0`). Hit **Start session** on the control panel (or `/api/session/start`) at go-live so the baseline is intentional and unlocks stay invested. Hold RESET to zero counters by hand.
 
+## Watchdog
+
+`watchdog.py` polls `http://127.0.0.1:8790/health` and restarts the HUD in the same Windows session if it is down or stale (capture stuck). It will not restart a healthy idle HUD (game unfocused is not stale). Install the hidden logon tasks from this folder:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install_watchdog.ps1
+```
+
+The scripts use the HUD folder they live in and `pythonw` from `PATH` (or `PROTOCOL_HUD_PYTHON`). Optional: set `STREAM_KEEPER_DIR` if you also run Stream Keeper and want auto-saved server IDs.
+
 ## Tests
-`python test_stream_profit.py` — unit tests for invest/kit classification and a calibrated 2026-10-28 replay (~+$43K stream profit vs deeply-negative raw delta).
+`python test_stream_profit.py` — unit tests for invest/kit classification, the per-life counter split, and a calibrated 2026-10-28 replay (~+$43K stream profit vs deeply-negative raw delta).
+
+`python test_capture_recovery.py` — unit tests for stale-frame / DXGI access-lost capture recovery used by `/health`.
 
 ## Sound design
 Built-in sounds are short and restrained: a soft thump and click per kill, a low cinematic hit on 5/8/12/20 streaks, a muffled hit on death, and a warm chord swell on VICTORY. Default volume is 0.55. Streak callouts are LETHAL (5), RELENTLESS (8), UNTOUCHABLE (12), and APEX (20). Doubles only show in the feed. Triples and up get a callout.

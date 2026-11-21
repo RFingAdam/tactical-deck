@@ -45,7 +45,15 @@ def scripted(monkeypatch):
     monkeypatch.setattr(wd, "region", lambda f, name: (f, name))
     monkeypatch.setattr(wd, "v_gray", lambda c: c)
     monkeypatch.setattr(wd, "ocr_lines", lambda c: c[0].get(c[1], []))
-    monkeypatch.setattr(wd, "read_cash", lambda f: f.get("cash", (None, "none")))
+    def _cash(f):
+        return f.get("cash", (None, "none"))
+    def _cash_full(f):
+        cash = _cash(f)
+        if len(cash) >= 3:
+            return cash[0], cash[1], cash[2]
+        return cash[0], cash[1], f.get("life")
+    monkeypatch.setattr(wd, "read_cash", _cash)
+    monkeypatch.setattr(wd, "read_cash_full", _cash_full)
 
 
 GAME = {}
@@ -158,18 +166,18 @@ def cash(v, how="pair"):
 
 def test_cash_first_reading_needs_two_checks():
     assert kinds(run([(cash(200699), 1)])) == []          # one check only
-    assert kinds(run([(cash(200699), 4)])) == [("cash", 200699, "pair")]
+    assert kinds(run([(cash(200699), 4)])) == [("cash", 200699, "pair", None)]
 
 
 def test_cash_small_change_accepted_quickly():
     ev = kinds(run([(cash(100000), 4), (cash(104000), 4)]))
-    assert ev == [("cash", 100000, "pair"), ("cash", 104000, "pair")]
+    assert ev == [("cash", 100000, "pair", None), ("cash", 104000, "pair", None)]
 
 
 def test_cash_big_jump_needs_four_checks():
-    assert kinds(run([(cash(100000), 4), (cash(180000), 5)])) == [("cash", 100000, "pair")]
-    assert kinds(run([(cash(100000), 4), (cash(180000), 7)])) == [("cash", 100000, "pair"), ("cash", 180000, "pair")]
+    assert kinds(run([(cash(100000), 4), (cash(180000), 5)])) == [("cash", 100000, "pair", None)]
+    assert kinds(run([(cash(100000), 4), (cash(180000), 7)])) == [("cash", 100000, "pair", None), ("cash", 180000, "pair", None)]
 
 
 def test_cash_chopped_reading_is_held_back():
-    assert kinds(run([(cash(56142), 4), (cash(6142), 20)])) == [("cash", 56142, "pair")]
+    assert kinds(run([(cash(56142), 4), (cash(6142), 20)])) == [("cash", 56142, "pair", None)]

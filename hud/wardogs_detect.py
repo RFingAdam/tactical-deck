@@ -249,19 +249,39 @@ def classify_cash(amounts, plains):
     return None, "lone amount in the delta position"
 
 
-def read_cash(frame):
-    """Account balance from the top-right header -> (value, how) or (None, why). Two of three OCR passes must agree."""
+def life_delta(amounts):
+    """The game's own money counter left of the balance ("-$13,340  $44,590"): spend + earnings since this life's
+    deploy, reset to $0 at death. Unlocks never move it, so the balance falling by more than this counter is an
+    unlock. Only valid on a "pair" reading. -> signed int or None."""
+    if len(amounts) < 2:
+        return None
+    x, sign, v, grouped = amounts[-2]
+    return -v if sign == "-" else v
+
+
+def read_cash_full(frame):
+    """-> (balance, how, life) where life = per-life counter when 2 of 3 OCR passes agree on it, else None."""
     c = region(frame, "cash")
-    vals, hows = [], []
+    vals, hows, lives = [], [], []
     for fn in (v_gray, v_inv, v_thr):
-        v, how = classify_cash(*parse_cash(ocr_words(fn(c))))
+        amounts, plains = parse_cash(ocr_words(fn(c)))
+        v, how = classify_cash(amounts, plains)
         if v is not None:
             vals.append(v)
             hows.append(how)
+            lives.append(life_delta(amounts) if how == "pair" else None)
     for v, how in zip(vals, hows):
         if vals.count(v) >= 2:
-            return v, how
-    return None, "no agreement"
+            agree = [l for vv, l in zip(vals, lives) if vv == v and l is not None]
+            life = next((l for l in agree if agree.count(l) >= 2), None)
+            return v, how, life
+    return None, "no agreement", None
+
+
+def read_cash(frame):
+    """Account balance from the top-right header -> (value, how) or (None, why). Two of three OCR passes must agree."""
+    v, how, _ = read_cash_full(frame)
+    return v, how
 
 
 def looks_chopped(cur, v, tol=3_000):
@@ -318,6 +338,9 @@ class Detector:
         self.cash = None          # last accepted balance
         self.cash_cand = None     # candidate reading and how many checks in a row agreed
         self.cash_cand_n = 0
+        self.life = None          # last per-life counter sent to the server
+        self.life_cand = None
+        self.life_cand_n = 0
 
     def cash_needed(self, v, how):
         """Checks in a row a new balance reading needs before it is accepted."""
@@ -401,7 +424,12 @@ class Detector:
         #      30 (~1 min) when it looks like the old balance with its leading digit lost ----
         if ts - self.last_cash_check >= 2.0:
             self.last_cash_check = ts
-            v, how = read_cash(frame)
+            v, how, life = read_cash_full(frame)
+            if life is not None:
+                if life == self.life_cand:
+                    self.life_cand_n += 1
+                else:
+                    self.life_cand, self.life_cand_n = life, 1
             if v is not None:
                 if v == self.cash_cand:
                     self.cash_cand_n += 1
@@ -409,8 +437,13 @@ class Detector:
                     self.cash_cand, self.cash_cand_n = v, 1
                 if v != self.cash and self.cash_cand_n >= self.cash_needed(v, how):
                     self.cash = v
-                    # Include how so the server can treat menu unlocks as invested, not losses.
-                    events.append(("cash", v, how))
+                    # how: menu/pair/right. life: the game's per-life counter in the same frame (or None).
+                    if life is not None:
+                        self.life = life
+                    events.append(("cash", v, how, life))
+                elif v == self.cash and life is not None and life != self.life and self.life_cand_n >= 2:
+                    self.life = life
+                    events.append(("cashlife", life))
         # ---- revived: ALL downed UI gone for 6 s of visible gameplay (tolerates white-flash / blur frames,
         #      menus, alt-tab) and no respawn countdown ----
         if self.downed_active and not down and ts - self.last_downed_ts > self.REVIVE_CLEAR_S \

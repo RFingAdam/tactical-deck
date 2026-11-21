@@ -4,6 +4,7 @@ Stdlib only (Python 3.9+). Run:  pythonw server.py   (or double-click start-hud.
   Overlay (Streamlabs Browser Source, 1920x1080): http://127.0.0.1:8790/overlay
   Control panel:                                 http://127.0.0.1:8790/control
   Buttons (Companion / Stream Deck, GET or POST): /api/kill  /api/death  /api/win  /api/undo  /api/reset
+  Health (watchdog):                              /health
 """
 import json, os, sys, time, threading, queue, mimetypes, ctypes
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
@@ -65,6 +66,8 @@ CLIENTS = set()
 DETECTOR = None
 BOOST = None
 HISTORY = []  # snapshots for undo
+STARTED_AT = time.time()
+FORCE_STALE_FLAG = os.path.join(ROOT, "force_stale.flag")
 GAME_PROFILE = None
 
 try:
@@ -100,6 +103,7 @@ def fresh():
             "cash_start": None, "cash_now": None, "cash_earned": 0,
             "cash_invested": 0, "cash_kits": 0, "cash_session_started": False,
             "cash_last_drop": None,  # {amount, ts, classified}
+            "cash_life": None,  # the game's per-life money counter (left of the balance), last reading
             "session_started": now, "session_id": int(now)}
 
 
@@ -280,7 +284,24 @@ CASH_DIP_WINDOW_S = 240   # ... 4 minutes, in case the old balance comes back (t
 CASH_SPIKE_WINDOW_S = 240  # spike-then-drop misread mirror of dip-then-recover
 CASH_INVEST_MIN = 5_000    # drops below this are never one-time unlocks
 CASH_KIT_WINDOW_S = 60     # drops within this after death/respawn stay as kit costs
-CASH_ROUND_MOD = 1_000     # "round number" unlock amounts
+CASH_ROUND_MOD = 500       # "round number" unlock amounts (S3 prices: $7,500, $10,000, $12,500, $25,000, $50,000)
+CASH_ROUND_AFTER_DEATH = 20_000  # a round drop this big is an unlock even on the deploy screen right after a death
+UNLOCK_MIN = 2_000         # life-counter method: smaller gaps are noise
+UNLOCK_SNAP_TOL = 50       # life-counter gap must sit on a $500 step
+
+
+def unlock_from_life(prev_bal, bal, prev_life, life):
+    """Unlock spend between two balance readings, from the game's own per-life counter (left of the balance).
+
+    Kits, vehicles, supplies and earnings move the counter and the balance together; an unlock moves only the
+    balance. unlock = (counter change) - (balance change). -> int ($500 steps), 0 for none, None when the
+    readings don't add up (a misread) and the old rules should decide.
+    """
+    est = (int(life) - int(prev_life)) - (int(bal) - int(prev_bal))
+    if est < UNLOCK_MIN:
+        return 0
+    snapped = int(round(est / 500.0)) * 500
+    return snapped if abs(est - snapped) <= UNLOCK_SNAP_TOL else None
 
 
 def is_round_amount(amount):
@@ -302,6 +323,10 @@ def classify_drop(amount, *, how=None, now=None, last_death_ts=0, kit_window_s=C
     now = time.time() if now is None else float(now)
     if amt < CASH_INVEST_MIN:
         return "kit" if amt > 0 else "none"
+    # Big round drops are unlocks even on the deploy screen right after a death.
+    # Readings with the per-life counter use unlock_from_life instead of this fallback.
+    if is_round_amount(amt) and amt >= CASH_ROUND_AFTER_DEATH:
+        return "invest"
     if last_death_ts and (now - float(last_death_ts)) <= float(kit_window_s):
         return "kit"
     menu = (how or "") == "menu"
@@ -323,6 +348,7 @@ def start_cash_session(balance=None):
         STATE["cash_last_drop"] = None
         STATE["cash_dip"] = None
         STATE["cash_spike"] = None
+        STATE["cash_life"] = None
         STATE["cash_session_started"] = True
         STATE["session_started"] = now
         STATE["last_event_ts"] = now
@@ -374,11 +400,21 @@ def undo_last_invest():
         return public()
 
 
-def apply_cash(balance, how=None):
-    """In-game balance reading. how is detector context ('menu'|'pair'|'right'|...).
+def apply_cash_life(life):
+    """The game's per-life counter moved while the balance didn't (death reset to $0, new match)."""
+    with LOCK:
+        STATE["cash_life"] = int(life)
+        save()
+        return public()
+
+
+def apply_cash(balance, how=None, life=None):
+    """In-game balance reading. how is detector context ('menu'|'pair'|'right'|...);
+    life is the game's per-life counter read in the same frame (None when it wasn't readable).
 
     Profit = (cash_now - cash_start) + cash_invested.
-    One-time unlocks/buys (>=$5K, not post-death, menu or round) add to cash_invested.
+    Unlocks: from the per-life counter when both readings have it (unlock_from_life);
+    otherwise the old rules (>= $5K round amounts, menu readings).
     """
     with LOCK:
         now = time.time()
@@ -398,7 +434,10 @@ def apply_cash(balance, how=None):
             STATE["cash_start"] = balance
             STATE["cash_session_started"] = True
         prev = STATE.get("cash_now")
+        prev_life = STATE.get("cash_life")
         if prev == balance:
+            if life is not None:
+                STATE["cash_life"] = int(life)
             return public()
         # Reject single-step moves bigger than CASH_MAX_STEP as OCR noise —
         # do not update cash_now (STREAM PROFIT is balance-based, so a bogus
@@ -452,8 +491,29 @@ def apply_cash(balance, how=None):
                 spike = None
         if 0 < gain <= CASH_MAX_STEP:
             STATE["cash_earned"] = int(STATE.get("cash_earned") or 0) + gain
-        # Spending / unlocks (skipped when the drop is just undoing a fake spike)
-        if prev is not None and balance < prev and not skip_drop:
+        unlock = None
+        if life is not None and prev_life is not None and prev is not None and not skip_drop:
+            unlock = unlock_from_life(prev, balance, prev_life, life)
+        if unlock is not None:
+            drop_amt = max(0, prev - balance) if prev is not None else 0
+            kit_part = max(0, drop_amt - unlock)
+            if unlock:
+                STATE["cash_invested"] = int(STATE.get("cash_invested") or 0) + int(unlock)
+                print(f"cash: unlock ${unlock:,} (balance {prev:,} -> {balance:,}, life {prev_life:,} -> {life:,})",
+                      flush=True)
+            if kit_part:
+                STATE["cash_kits"] = int(STATE.get("cash_kits") or 0) + int(kit_part)
+            if drop_amt:
+                STATE["cash_last_drop"] = {
+                    "amount": int(drop_amt),
+                    "ts": now,
+                    "classified": "invest" if unlock and not kit_part else ("kit" if not unlock else "split"),
+                    "how": how,
+                    "unlock": int(unlock or 0),
+                    "life": int(life) if life is not None else None,
+                }
+        # Spending / unlocks fallback when the life counter was missing (skipped when undoing a fake spike)
+        elif prev is not None and balance < prev and not skip_drop:
             drop_amt = prev - balance
             if 0 < drop_amt <= CASH_MAX_STEP:
                 kind = classify_drop(
@@ -475,6 +535,8 @@ def apply_cash(balance, how=None):
         STATE["cash_dip"] = dip
         STATE["cash_spike"] = spike
         STATE["cash_now"] = balance
+        if life is not None:
+            STATE["cash_life"] = int(life)
         save()
         broadcast({"type": "cash", "state": public()})
         return public()
@@ -513,6 +575,8 @@ def apply(kind):
             STATE["streak"] = 0
             STATE["multi"] = 0
             STATE["last_death_ts"] = now
+            if STATE.get("cash_life") is not None:
+                STATE["cash_life"] = 0  # the game's per-life counter restarts at $0 on the deploy screen
         elif kind == "win":
             STATE["wins"] += 1
         STATE["last_event_ts"] = now
@@ -521,6 +585,42 @@ def apply(kind):
         evt.update(extra)
         broadcast(evt)
         return public()
+
+
+def health_payload():
+    """Process + capture health for the watchdog. stale is only true while the
+    detector is actually trying to grab frames (game focused) and they have gone
+    stale; an idle HUD with the game unfocused is healthy."""
+    cap = None
+    det = None
+    stale = False
+    if DETECTOR is not None:
+        det = dict(DETECTOR.status)
+        cap = det.get("capture")
+        if cap is None and getattr(DETECTOR, "capture", None) is not None:
+            cap = DETECTOR.capture.health(capturing=bool(det.get("game_focused")))
+            det["capture"] = cap
+        stale = bool(cap and cap.get("stale"))
+        if det.get("running") is False and det.get("error"):
+            stale = True
+    ok = not stale
+    if os.path.isfile(FORCE_STALE_FLAG):
+        stale = True
+        ok = False
+    return {
+        "ok": bool(ok),
+        "stale": bool(stale),
+        "pid": os.getpid(),
+        "uptime_s": round(time.time() - STARTED_AT, 1),
+        "capture": cap,
+        "detector": None if det is None else {
+            "enabled": det.get("enabled"),
+            "running": det.get("running"),
+            "game_focused": det.get("game_focused"),
+            "error": det.get("error"),
+            "fps": det.get("fps"),
+        },
+    }
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -579,6 +679,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._file(p[1:])
         if p == "/events":
             return self._sse()
+        if p in ("/health", "/api/health"):
+            body = health_payload()
+            return self._send(200, json.dumps(body))
         if p.startswith("/api/detector"):
             if DETECTOR is None:
                 return self._send(200, json.dumps({"enabled": False, "running": False, "error": "auto-detect off in config.json"}))
@@ -695,7 +798,12 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError:
                 return self._send(400, '{"error":"balance must be a number"}')
             how = (qs.get("how") or [None])[0]
-            return self._send(200, json.dumps(apply_cash(bal, how=how)))
+            life = (qs.get("life") or [None])[0]
+            try:
+                life = int(life.replace(",", "")) if life not in (None, "") else None
+            except ValueError:
+                return self._send(400, '{"error":"life must be a number"}')
+            return self._send(200, json.dumps(apply_cash(bal, how=how, life=life)))
         if p.startswith("/api/"):
             kind = p.rsplit("/", 1)[-1]
             if kind in ("kill", "death", "win", "undo", "reset", "invest"):
@@ -809,9 +917,12 @@ if __name__ == "__main__":
         from autodetect import AutoDetect
         def emit(ev):
             if isinstance(ev, tuple) and ev[0] == "cash":
-                # ("cash", balance) or ("cash", balance, how)
+                # ("cash", balance), ("cash", balance, how) or ("cash", balance, how, life)
                 how = ev[2] if len(ev) >= 3 else None
-                apply_cash(ev[1], how=how)
+                life = ev[3] if len(ev) >= 4 else None
+                apply_cash(ev[1], how=how, life=life)
+            elif isinstance(ev, tuple) and ev[0] == "cashlife":
+                apply_cash_life(ev[1])
             elif ev in ("kill", "death", "win"):
                 apply(ev)
             else:
