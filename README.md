@@ -25,6 +25,17 @@
 
 ---
 
+Tactical Deck is a cinematic, game-reactive soundboard for streamers, with stingers plus Director and HUD helpers that play them on stream.
+
+## SwampBewdy stream tools
+
+| Tool | What it is |
+|---|---|
+| [Haven Deck](https://github.com/RFingAdam/haven-deck) | A touchscreen control panel for scenes and sounds on a Raspberry Pi, a tablet, or a browser. |
+| [Tactical Deck](https://github.com/RFingAdam/tactical-deck) | A soundboard of cinematic stingers, plus Director and HUD helpers that play them on stream. |
+
+They work together: Haven Deck can call Tactical Deck's Director over HTTP, so a tap on the kiosk plays a stinger on the stream computer. You can also use either one on its own.
+
 Most first soundboards are an airhorn and a bruh. **Tactical Deck** is what you build after that:
 
 - 24 cinematic, military-grade stingers, all synthesized from code. Free to use anywhere, **just credit SwampBewdy**.
