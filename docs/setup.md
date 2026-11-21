@@ -8,31 +8,31 @@ They talk over HTTP. This guide covers three layouts people actually run:
 - **B.** All on one PC, with Streamlabs or OBS
 - **C.** The deck on a Pi or tablet, talking to a stream PC on the LAN
 
-Addresses below are examples. `192.168.1.50` and `<stream-pc>` mean *your* stream computer. Replace them with the IP or hostname you actually use. Do not commit a machine-specific `config.json` in either repo.
+`<stream-pc>` below means *your* stream computer. Replace it with the hostname or private LAN IP you actually type in the URL. Do not commit a machine-specific `config.json` in either repo.
 
 A copy of this guide lives in [Haven Deck](https://github.com/RFingAdam/haven-deck/blob/main/docs/setup.md) and [Tactical Deck](https://github.com/RFingAdam/tactical-deck/blob/main/docs/setup.md).
 
 ## Safe defaults
 
 - Leave Director bound to `127.0.0.1`, with `allowed_hosts` and `allowed_origins` empty, unless a second device must call it.
-- Bind to `0.0.0.0` only on a private LAN (`10.0.0.0/8`, `172.16.0.0/12`, or `192.168.0.0/16`). Do not put Director, Companion, or the kiosk on the public internet.
+- Bind to `0.0.0.0` only on a private LAN (RFC 1918: 10/8, 172.16/12, or 192.168/16). Do not put Director, Companion, or the kiosk on the public internet.
 - If you open a Windows firewall port, allow only your local subnet, and only on a Private network profile.
 - Open Haven Deck in the browser and let it proxy `/director` and `/companion`. Do not point the browser at Director directly.
 
 ## Settings you might change
 
-**Director** (`director/config.json` in Tactical Deck; copy from `director/config.default.json` or the snippets in the README):
+**Director** (`director/config.json` in Tactical Deck). Merge the keys you need into your existing file; Director fills the rest from `director/config.default.json`.
 
 | Key | Default | When to change it |
 |---|---|---|
 | `host` | `127.0.0.1` | Set to `0.0.0.0` only if another machine must reach Director. |
 | `port` | `8781` | Leave unless that port is taken. |
-| `allowed_hosts` | `[]` | Host header values to accept, such as `"192.168.1.50"` or `"<stream-pc>"`. Hostname or IP, optional port. Loopback is always allowed. No wildcards and no URLs. |
+| `allowed_hosts` | `[]` | Host header values to accept, such as `"<stream-pc>"`. Hostname or IP, optional port. Loopback is always allowed. No wildcards and no URLs. |
 | `allowed_origins` | `[]` | Bare origins such as `"http://127.0.0.1:4173"`. Needed when a browser — or Haven Deck's proxy forwarding that browser's `Origin` — posts to Director. No paths, no wildcards. |
 
 Restart Director after you edit this file.
 
-**Haven Deck** (`config.json`, copied from `config.example.json`):
+**Haven Deck** (`config.json`, copied from `config.example.json`). Change the keys below; you do not have to replace the whole file.
 
 | Key | Default | When to change it |
 |---|---|---|
@@ -92,7 +92,7 @@ Two ways. Prefer **C1** when you can: Director and Companion stay on loopback, s
 1. On the stream PC, run Director and Companion as in B, still bound to `127.0.0.1`.
 2. On the stream PC, run Haven Deck (`npm run build && npm start`) with `bind` set to `0.0.0.0` and `port` `4173`. Keep `directorBase` and `companionBase` on `127.0.0.1`.
 3. Open a Windows firewall rule for TCP 4173 from your local subnet only, Private profile (see below).
-4. On the tablet or Pi, open `http://192.168.1.50:4173` or `http://<stream-pc>:4173`.
+4. On the tablet or Pi, open `http://<stream-pc>:4173`.
 
 Director's allowlists stay empty. The browser talks to the kiosk; the kiosk talks to Director and Companion on localhost.
 
@@ -100,33 +100,33 @@ Director's allowlists stay empty. The browser talks to the kiosk; the kiosk talk
 
 Use this when the Pi itself runs the kiosk (`npm start` and `bash pi-setup/kiosk.sh`).
 
-On the stream PC, in `director/config.json`:
+On the stream PC, merge these keys into `director/config.json`:
 
 ```json
 {
   "host": "0.0.0.0",
   "port": 8781,
-  "allowed_hosts": ["192.168.1.50"],
+  "allowed_hosts": ["<stream-pc>"],
   "allowed_origins": ["http://127.0.0.1:4173"]
 }
 ```
 
-`allowed_hosts` must include the Host header Director will see. If `directorBase` is `http://192.168.1.50:8781`, that is `192.168.1.50`. If you use `http://<stream-pc>:8781`, add `"<stream-pc>"` as well.
+`allowed_hosts` must include the Host header Director will see. If `directorBase` is `http://<stream-pc>:8781`, that is `<stream-pc>` (the same hostname or IP). If you sometimes use a different name for the same machine, list both.
 
 `allowed_origins` must include the exact origin of the Haven Deck page, because the kiosk proxy forwards the browser's `Origin` header:
 
 - Pi kiosk at the default local URL: `http://127.0.0.1:4173`
-- A tablet opening the deck on the Pi: also add `http://<pi-address>:4173`
+- A tablet opening the deck on the Pi: also add `http://<deck-device>:4173`
 
 If Companion should be reachable from the Pi, allow its HTTP API to listen on the LAN and open TCP 8000 the same way as 8781.
 
-On the Pi, `config.json`:
+On the Pi, set these keys in `config.json`:
 
 ```json
 {
   "simulate": true,
-  "companionBase": "http://192.168.1.50:8000",
-  "directorBase": "http://192.168.1.50:8781",
+  "companionBase": "http://<stream-pc>:8000",
+  "directorBase": "http://<stream-pc>:8781",
   "bind": "127.0.0.1",
   "port": 4173
 }
@@ -147,9 +147,9 @@ Restart Director after the config change.
 Test from the Pi:
 
 ```bash
-curl -s http://192.168.1.50:8781/api/status
-curl -s -X POST http://192.168.1.50:8781/play/t_explosion
-curl -s -X POST -H "Origin: http://127.0.0.1:4173" http://192.168.1.50:8781/play/t_explosion
+curl -s http://<stream-pc>:8781/api/status
+curl -s -X POST http://<stream-pc>:8781/play/t_explosion
+curl -s -X POST -H "Origin: http://127.0.0.1:4173" http://<stream-pc>:8781/play/t_explosion
 curl -s -X POST http://127.0.0.1:4173/director/play/t_explosion
 ```
 
@@ -159,7 +159,7 @@ You should hear the clip on the stream PC. If the first two work but the Origin 
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `403` with `{"error": "local requests only"}` | Director rejected the `Host` or `Origin` header | Add the exact host you used (`192.168.1.50` or `<stream-pc>`, optional port) to `allowed_hosts`. Add the exact page origin (`http://...` with port, no path) to `allowed_origins`. Restart Director. If you meant to stay local-only, call `127.0.0.1`, not the LAN IP. |
+| `403` with `{"error": "local requests only"}` | Director rejected the `Host` or `Origin` header | Add the exact host you used (`<stream-pc>`, optional port) to `allowed_hosts`. Add the exact page origin (`http://...` with port, no path) to `allowed_origins`. Restart Director. If you meant to stay local-only, call `127.0.0.1`, not the LAN address. |
 | Connection refused or a timeout | Still bound to loopback, or the firewall blocked the port | Set Director `host` or the kiosk `bind` to `0.0.0.0` only if a remote device must connect. Add a subnet-scoped firewall rule. Confirm `curl` to `/api/status` works from the other device. |
 | Mixed HTTP/HTTPS, a blank page, or requests blocked in the browser | The page is `https` and Director or the kiosk is `http` | Serve both over HTTP on the LAN, or both over HTTPS. Browsers block mixed content. |
 | CORS error in the browser console | The page called Director or Companion directly | Open Haven Deck (the kiosk or Vite URL) and use its `/director` and `/companion` proxy. Director does not send CORS headers. |
