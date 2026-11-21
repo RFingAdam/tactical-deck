@@ -19,6 +19,7 @@
   <b><a href="#-features">Features</a></b> ·
   <b><a href="#-how-it-works">How it works</a></b> ·
   <b><a href="#-http-api">HTTP API</a></b> ·
+  <b><a href="docs/setup.md">Common setups</a></b> ·
   <b><a href="#setup-for-your-monitor">Setup for your monitor</a></b> ·
   <b><a href="#-add-your-game">Add your game</a></b>
 </p>
@@ -89,6 +90,8 @@ Demo mode simulates playback with each clip's real length, so you can see combos
    ```
    This adds two finished pages, **TACTICAL** and **TACTICAL FX**. Your existing pages are verified byte-identical afterwards.
 6. **Optional: game-reactive.** Run `hud\start-hud.cmd` and add `http://127.0.0.1:8790/overlay?pos=bar` as a Browser Source. On the control page, set **Display layout** to `16:9` (full-frame monitor) or `ultrawide-letterbox` (game in the middle with black bars — the original SwampBewdy layout).
+
+Running the deck in a browser, on one PC with OBS or Streamlabs, or on a Pi or tablet talking to your stream PC? See [Common setups](docs/setup.md).
 
 ## ✨ Features
 
@@ -210,7 +213,7 @@ The Director binds to `127.0.0.1` by default and rejects foreign Host/Origin hea
 }
 ```
 
-`allowed_hosts` are Host header values (hostname or IP, optional port). `allowed_origins` are bare `http(s)://` origins, used when a browser on another device posts to Director. Do not commit a machine-specific `config.json`.
+`allowed_hosts` are Host header values (hostname or IP, optional port). `allowed_origins` are bare `http(s)://` origins, used when a browser on another device posts to Director. Do not commit a machine-specific `config.json`. Step-by-step layouts, tests, and a Windows firewall example are in [Common setups](docs/setup.md).
 
 | Method | Path | Does |
 |---|---|---|
