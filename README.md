@@ -328,3 +328,7 @@ Issues and PRs are welcome, especially game profiles, new combos and new synthes
   <a href="https://www.twitch.tv/swampbewdy"><b>🔴 Catch it live on Twitch</b></a> · <a href="https://www.youtube.com/@SwampBewdy"><b>▶️ Highlights on YouTube</b></a><br>
   <sub>If this made your stream sound better, a ⭐ helps other streamers find it.</sub>
 </p>
+
+## For agents
+
+See [CLAUDE.md](CLAUDE.md) and [REPOS.md](REPOS.md) for where new streaming work belongs. Do not commit secrets, LAN IPs, or private song packs.

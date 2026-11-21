@@ -231,6 +231,82 @@ class SessionStartTests(unittest.TestCase):
         self.assertEqual(pub["cash_delta"], 0)
 
 
+class LifeCounterTests(unittest.TestCase):
+    """Nov 13: unlocks vs kits from the game's per-life counter (left of the balance). Numbers are the Nov 12
+    stream (Twitch VOD v2927214045), checked on video."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="hud-profit-"))
+        self.s = load_server(self.tmp)
+        self.s.STATE = self.s.fresh()
+        self.s.HISTORY.clear()
+
+    def test_unlocks_on_deploy_screen_after_death(self):
+        # 19:16 CT: died, then Operator Backpack $25K and Mosin Nagant $50K, then PU 91/30 scope $12.5K + $120 kit
+        self.s.start_cash_session(90_181)
+        self.s.apply_cash(90_181, how="pair", life=0)
+        self.s.apply("death")
+        self.s.apply_cash(65_181, how="pair", life=0)
+        self.s.apply_cash(15_181, how="pair", life=0)
+        self.s.apply_cash(2_561, how="pair", life=-120)
+        pub = self.s.public()
+        self.assertEqual(pub["cash_invested"], 87_500)
+        self.assertEqual(pub["cash_kits"], 120)
+        self.assertEqual(pub["cash_delta"], -120)  # only the kit is a loss
+
+    def test_unlock_and_kit_in_one_reading(self):
+        # 21:58 CT: T-21 $10K + RPG-7 $20K + $6,880 kit between two readings
+        self.s.start_cash_session(61_755)
+        self.s.apply_cash(61_755, how="pair", life=0)
+        self.s.apply_cash(24_875, how="pair", life=-6_880)
+        pub = self.s.public()
+        self.assertEqual(pub["cash_invested"], 30_000)
+        self.assertEqual(pub["cash_kits"], 6_880)
+        self.assertEqual(pub["cash_delta"], -6_880)
+
+    def test_kit_only_and_earnings(self):
+        self.s.start_cash_session(61_755)
+        self.s.apply_cash(61_755, how="pair", life=0)
+        self.s.apply_cash(48_415, how="pair", life=-13_340)   # kit
+        self.s.apply_cash(50_415, how="pair", life=-11_340)   # +$2K earned
+        pub = self.s.public()
+        self.assertEqual(pub["cash_invested"], 0)
+        self.assertEqual(pub["cash_kits"], 13_340)
+        self.assertEqual(pub["cash_delta"], -11_340)
+
+    def test_unlock_while_earning_in_the_same_gap(self):
+        # $10K unlock and $12K earned between readings: balance only +$2K, counter +$12K
+        self.s.start_cash_session(40_000)
+        self.s.apply_cash(40_000, how="pair", life=-5_000)
+        self.s.apply_cash(42_000, how="pair", life=7_000)
+        pub = self.s.public()
+        self.assertEqual(pub["cash_invested"], 10_000)
+        self.assertEqual(pub["cash_delta"], 12_000)
+
+    def test_counter_that_does_not_add_up_falls_back(self):
+        # gap of $3,070 is no $500 step: a misread, so the old rules decide (odd $6,900 drop -> kit)
+        self.s.start_cash_session(50_000)
+        self.s.apply_cash(50_000, how="pair", life=0)
+        self.s.apply_cash(43_100, how="pair", life=-3_830)
+        pub = self.s.public()
+        self.assertEqual(pub["cash_invested"], 0)
+        self.assertEqual(pub["cash_kits"], 6_900)
+
+    def test_death_resets_counter(self):
+        self.s.start_cash_session(30_000)
+        self.s.apply_cash(30_000, how="pair", life=-2_000)
+        self.s.apply("death")
+        self.assertEqual(self.s.STATE["cash_life"], 0)
+        self.s.apply_cash(25_390, how="pair", life=-4_610)  # next kit, not an unlock
+        self.assertEqual(self.s.public()["cash_invested"], 0)
+
+    def test_big_round_drop_after_death_without_counter(self):
+        # fallback path (no counter on either reading): $25K round right after a death is an unlock
+        now = time.time()
+        self.assertEqual(self.s.classify_drop(25_000, how="pair", now=now, last_death_ts=now - 30), "invest")
+        self.assertEqual(self.s.classify_drop(13_340, how="pair", now=now, last_death_ts=now - 30), "kit")
+
+
 if __name__ == "__main__":
     # Make sure we don't need Windows-only imports
     os.environ.setdefault("PROTOCOL_HUD_TEST", "1")
