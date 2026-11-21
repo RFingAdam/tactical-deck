@@ -104,7 +104,7 @@ Two color-coded Companion pages: combos up top, ordnance, recon and stingers bel
 <td width="50%" valign="top">
 
 ### 📱 Works from a touchscreen too
-Every button is a plain HTTP call, so a phone, a tablet or a Raspberry Pi touchscreen can drive the deck. This is the author's Pi kiosk (*Haven Deck*): it has a **Tactical** tab, and the full SFX board has *Combos* and *Tactical* filters. Press-to-sound latency is about 15 ms.
+Every button is a plain HTTP call, so a phone, a tablet or a Raspberry Pi touchscreen can drive the deck. This is the author's Pi kiosk, now published as open-source [Haven Deck](https://github.com/RFingAdam/haven-deck): a DIY touchscreen stream deck for a Raspberry Pi, a tablet, or a browser. You can load your own sounds and scene buttons. The author's board has a **Tactical** tab, and the full SFX board has *Combos* and *Tactical* filters. Press-to-sound latency is about 15 ms.
 
 </td>
 <td width="50%"><img src="docs/media/haven-deck-tactical.png" alt="Haven Deck Raspberry Pi touchscreen, Tactical tab"></td>
@@ -185,7 +185,7 @@ flowchart LR
 | `haven` | You run Voicemeeter and want the sounds *in your mic* (Discord hears them too) | Voicemeeter input insert | ✅ | ✅ sample-accurate |
 | `demo` | You're trying the UI, writing combos, or running CI | nowhere | simulated | simulated |
 
-> The `haven` engine is the author's native Rust Voicemeeter insert (Haven FX). It isn't open-sourced yet; the adapter is in `director/engines.py`, and `integrations/haven/` installs the pack into it.
+> The kiosk UI is open source in [Haven Deck](https://github.com/RFingAdam/haven-deck). The `haven` engine behind it is the author's native Rust Voicemeeter insert (Haven FX) and is not open-sourced yet; the adapter is in `director/engines.py`, and `integrations/haven/` installs the pack into it.
 
 ## 🔌 HTTP API
 
@@ -268,7 +268,7 @@ It captures the screen the same way OBS display capture does (Windows Desktop Du
 
 <details><summary><b>Do I need a Stream Deck?</b></summary>
 
-No. The settings UI has every button, and anything that can send an HTTP request can be a deck: Companion's web buttons, a phone, Touch Portal or a Raspberry Pi kiosk.
+No. The settings UI has every button, and anything that can send an HTTP request can be a deck: Companion's web buttons, a phone, Touch Portal, or a Raspberry Pi kiosk. For a ready-made Pi, tablet, or browser deck, see [Haven Deck](https://github.com/RFingAdam/haven-deck).
 </details>
 
 <details><summary><b>Can I use the sounds in my own videos or another soundboard?</b></summary>
