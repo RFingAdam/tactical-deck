@@ -23,7 +23,7 @@ import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlparse, urlsplit
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
@@ -53,10 +53,89 @@ def load_config() -> dict:
     return cfg
 
 
+
+def _host_port(entry: str, default_port: int) -> tuple[str, int]:
+    """Parse a host or host:port. No schemes, paths, or wildcards."""
+    raw = (entry or "").strip().lower()
+    if not raw or any(c in raw for c in "/\\?#@*[]"):
+        raise ValueError(f"Invalid allowed host: {entry!r}")
+    if "://" in raw:
+        raise ValueError(f"allowed_hosts entries are hostnames, not URLs: {entry!r}")
+    host, sep, port_s = raw.rpartition(":")
+    if sep and port_s.isdigit() and host:
+        port = int(port_s)
+        if not 1 <= port <= 65535:
+            raise ValueError(f"Invalid allowed host port: {entry!r}")
+        return host, port
+    if sep and not host:
+        raise ValueError(f"Invalid allowed host: {entry!r}")
+    return raw, default_port
+
+
+def _origin(entry: str) -> str:
+    """Parse an http(s) origin (scheme + host + optional port, no path)."""
+    raw = (entry or "").strip()
+    u = urlparse(raw)
+    if u.scheme not in ("http", "https") or not u.hostname or u.username or u.password:
+        raise ValueError(f"Invalid allowed origin: {entry!r}")
+    if u.path not in ("", "/") or u.query or u.fragment or u.params:
+        raise ValueError(f"allowed_origins must be a bare origin, not a path: {entry!r}")
+    host = u.hostname.lower()
+    if any(c in host for c in "*"):
+        raise ValueError(f"Invalid allowed origin: {entry!r}")
+    port = u.port
+    if port is None:
+        return f"{u.scheme}://{host}"
+    return f"{u.scheme}://{host}:{port}"
+
+
+def normalize_host_header(header: str | None, default_port: int) -> str | None:
+    raw = (header or "").strip().lower()
+    if not raw or any(c in raw for c in "/\\?#@*[]"):
+        return None
+    host, sep, port_s = raw.rpartition(":")
+    if sep and port_s.isdigit() and host:
+        return f"{host}:{int(port_s)}"
+    return f"{raw}:{default_port}"
+
+
+def request_allowed(cfg: dict, port: int, host_header: str | None, origin: str | None) -> bool:
+    """Loopback is always allowed. Extra hosts/origins come from config only."""
+    allowed = {f"127.0.0.1:{port}", f"localhost:{port}"}
+    for entry in cfg.get("allowed_hosts") or []:
+        if not isinstance(entry, str):
+            return False
+        name, p = _host_port(entry, port)
+        allowed.add(f"{name}:{p}")
+    host = normalize_host_header(host_header, port)
+    if host not in allowed:
+        return False
+    if not origin:
+        return True
+    allowed_origins = {f"http://{h}" for h in allowed}
+    for entry in cfg.get("allowed_origins") or []:
+        if not isinstance(entry, str):
+            return False
+        allowed_origins.add(_origin(entry))
+    try:
+        return _origin(origin) in allowed_origins
+    except ValueError:
+        return False
+
+
 def validate_config(cfg: dict) -> None:
     d = cfg["duck"]
     if not -24 <= float(d["headphones_db"]) <= 0 or not -30 <= float(d["stream_db"]) <= 0:
         raise ValueError("Duck depths must be 0..-24 dB (headphones) and 0..-30 dB (stream)")
+    port = int(cfg.get("port", 8781))
+    for entry in cfg.get("allowed_hosts") or []:
+        if not isinstance(entry, str):
+            raise ValueError("allowed_hosts entries must be strings")
+        _host_port(entry, port)
+    for entry in cfg.get("allowed_origins") or []:
+        if not isinstance(entry, str):
+            raise ValueError("allowed_origins entries must be strings")
+        _origin(entry)
     for name, combo in cfg.get("combos", {}).items():
         for key in ("steps", "on", "off", "loop"):
             for step in combo.get(key, []):
@@ -335,10 +414,9 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def _allowed(self) -> bool:
-        port = self.server.server_port
-        hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
-        origin = self.headers.get("Origin")
-        return self.headers.get("Host") in hosts and (origin is None or origin in {f"http://{h}" for h in hosts})
+        cfg = getattr(self.server, "director", None)
+        cfg = cfg.cfg if cfg is not None else {}
+        return request_allowed(cfg, self.server.server_port, self.headers.get("Host"), self.headers.get("Origin"))
 
     def do_GET(self):
         self._route("GET")

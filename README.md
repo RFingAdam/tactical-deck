@@ -200,7 +200,17 @@ flowchart LR
 
 ## 🔌 HTTP API
 
-The Director binds to `127.0.0.1` and rejects foreign Host/Origin headers, so a random web page can't fire your soundboard.
+The Director binds to `127.0.0.1` by default and rejects foreign Host/Origin headers, so a random web page can't fire your soundboard. To let a kiosk on your LAN call Director, set `host` to `0.0.0.0` and list extra names in `director/config.json` (loopback stays allowed; leave these empty for a local-only setup):
+
+```json
+{
+  "host": "0.0.0.0",
+  "allowed_hosts": ["192.168.1.10"],
+  "allowed_origins": ["https://deck.example.com"]
+}
+```
+
+`allowed_hosts` are Host header values (hostname or IP, optional port). `allowed_origins` are bare `http(s)://` origins, used when a browser on another device posts to Director. Do not commit a machine-specific `config.json`.
 
 | Method | Path | Does |
 |---|---|---|
