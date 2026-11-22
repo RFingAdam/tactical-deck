@@ -42,6 +42,31 @@ Existing installs that already have a `config.json` without this setting keep **
 
 Pick the preset on http://127.0.0.1:8790/control → **Display layout**. No Streamlabs change needed; the overlay and the auto-detect crops update live.
 
+## Game status line (code only, no AI)
+A single short line that tells a muted viewer what is happening, for a vertical / phone layout. Everything comes from the detector's own screen reads (no AI, no network calls, no extra OCR passes):
+
+| Line | From |
+|---|---|
+| `FLYING IN` | pilot key hints in the lower-right hint panel (`COLLECTIVE LIFT / DESCENT`, `DEPLOY FLARES`) |
+| `RIDING IN` | `CHANGE SEAT` hint without the pilot hints (passenger or any vehicle seat; air vs ground can't be told apart) |
+| `DEPLOYING` | the `WAITING TO DEPLOY...` screen (centre) |
+| `DOWN - WAITING ON A REVIVE` | the existing downed detection (max 75 s, so a missed revive can't stick) |
+| `KIA - REDEPLOYING` | a counted death (until the deploy screen or 30 s) |
+| `BACK IN THE FIGHT` | 10 s after the deploy screen closes |
+| `BACK UP - REVIVED` | a revive |
+| `3 KILL STREAK`, `5 KILL STREAK - ON A TEAR` | the HUD streak (3+), 20 s after the last kill; resets on death |
+| `VICTORY` | the win detection, 30 s |
+| `WARDOGS S3 - LIVE WITH THE SQUAD` | idle / unknown |
+
+Signals need 2-3 reads in a row and stay on a few seconds after the last read; a line stays at least 4 s before falling back to idle, so it doesn't flicker.
+
+- Browser source: `http://127.0.0.1:8790/status-line` (transparent; `?scale=1.2`, `?align=left|center|right`, `?idle=0` hides the idle line)
+- Preview every state: `?demo=flying|riding|deploying|downed|kia|back|streak3|streak5|revived|victory|idle`, or `?demo=cycle`
+- JSON: `/status` · Plain text (Streamlabs Text source "read from file"): `status.txt` next to `server.py`
+- Tests: `pytest tests/test_status_line.py` (replays OCR text read from two real stream recordings, `tests/fixtures/status_line/`)
+
+<p align="center"><img src="../docs/media/status-line-states.png" alt="Every status line state" width="540"></p>
+
 ## Auto-detect (Wardogs)
 While `WardogsClient-Win64-Shipping.exe` is the focused window, the server reads the screen about 4× per second with the built-in Windows OCR. It only reads pixels. It never touches game files or memory, and nothing leaves your PC.
 

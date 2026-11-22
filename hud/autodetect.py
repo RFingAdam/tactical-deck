@@ -253,6 +253,7 @@ class AutoDetect(threading.Thread):
         self.cfg = cfg if cfg is not None else {}
         self._pending_profile = None
         self.capture = None
+        self.on_frame = None  # optional callback(dbg, ts) after each detector frame (game status line)
         self.status = {"enabled": enabled, "running": False, "game_focused": False, "fps": 0.0,
                        "kills": 0, "deaths": 0, "wins": 0, "last_event": None, "error": None}
 
@@ -329,6 +330,11 @@ class AutoDetect(threading.Thread):
                 except Exception:
                     wd.set_frame_game_rect(None)
                 events, _dbg = det.feed(frame, t0)
+                if self.on_frame is not None:
+                    try:
+                        self.on_frame(_dbg, t0)
+                    except Exception as e:  # never let the status line break kill/death detection
+                        print('status line error:', e)
                 if perf:
                     perf.maybe_log(frame, wd)
                 if watch:

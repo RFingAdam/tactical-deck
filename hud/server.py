@@ -5,6 +5,7 @@ Stdlib only (Python 3.9+). Run:  pythonw server.py   (or double-click start-hud.
   Control panel:                                 http://127.0.0.1:8790/control
   Buttons (Companion / Stream Deck, GET or POST): /api/kill  /api/death  /api/win  /api/undo  /api/reset
   Health (watchdog):                              /health
+  Game status line (code only, no AI):            /status-line (browser source)  /status (JSON)  status.txt
 """
 import json, os, sys, time, threading, queue, mimetypes, ctypes
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
@@ -68,6 +69,9 @@ BOOST = None
 HISTORY = []  # snapshots for undo
 STARTED_AT = time.time()
 FORCE_STALE_FLAG = os.path.join(ROOT, "force_stale.flag")
+STATUS_TXT = os.path.join(ROOT, "status.txt")
+from status_line import StatusLine, DEMO_STATES
+STATUS = StatusLine()
 GAME_PROFILE = None
 
 try:
@@ -270,6 +274,7 @@ def _push_history():
 
 
 def do_reset(auto=False):
+    STATUS.on_event("reset")
     _push_history()
     STATE.clear()
     STATE.update(fresh())
@@ -581,6 +586,7 @@ def apply(kind):
             STATE["wins"] += 1
         STATE["last_event_ts"] = now
         save()
+        STATUS.on_event(kind, streak=STATE["streak"])
         evt = {"type": kind, "state": public()}
         evt.update(extra)
         broadcast(evt)
@@ -679,6 +685,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._file(p[1:])
         if p == "/events":
             return self._sse()
+        if p == "/status-line":
+            return self._file("status_line.html")
+        if p in ("/status", "/api/status"):
+            demo = (qs.get("demo") or [None])[0]
+            if demo:
+                st, text = DEMO_STATES.get(demo, DEMO_STATES["idle"])
+                return self._send(200, json.dumps({"state": st, "text": text, "since": 0, "demo": True}))
+            return self._send(200, json.dumps(STATUS.current()))
         if p in ("/health", "/api/health"):
             body = health_payload()
             return self._send(200, json.dumps(body))
@@ -844,6 +858,31 @@ class Handler(BaseHTTPRequestHandler):
             self.close_connection = True
 
 
+def write_status_txt(text):
+    tmp = STATUS_TXT + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    os.replace(tmp, STATUS_TXT)
+
+
+def status_loop():
+    """Re-evaluates the status line twice a second (hold times expire here); writes status.txt and pushes an SSE
+    'status' event only when the text changes."""
+    last = None
+    while True:
+        try:
+            snap = STATUS.current()
+            if snap["text"] != last:
+                write_status_txt(snap["text"])
+                broadcast({"type": "status", "status": snap})
+                if last is not None:
+                    print(time.strftime("%Y-%m-%d %H:%M:%S"), "status:", snap["text"], flush=True)
+                last = snap["text"]
+        except Exception as e:
+            print("status loop error:", e, flush=True)
+        time.sleep(0.5)
+
+
 # ---------- global hotkeys (Windows) ----------
 MODS = {"alt": 0x1, "ctrl": 0x2, "control": 0x2, "shift": 0x4, "win": 0x8}
 NAMED_VK = {"backspace": 0x08, "tab": 0x09, "enter": 0x0D, "space": 0x20, "pageup": 0x21,
@@ -913,6 +952,7 @@ if __name__ == "__main__":
     os.makedirs(SOUND_DIR, exist_ok=True)
     if CFG.get("hotkeys_enabled") and sys.platform == "win32":
         threading.Thread(target=hotkey_loop, daemon=True).start()
+    threading.Thread(target=status_loop, daemon=True).start()
     if CFG.get("auto_detect") and sys.platform == "win32":
         from autodetect import AutoDetect
         def emit(ev):
@@ -926,11 +966,14 @@ if __name__ == "__main__":
             elif ev in ("kill", "death", "win"):
                 apply(ev)
             else:
+                if ev in ("downed", "revived"):
+                    STATUS.on_event(ev)
                 broadcast({"type": ev, "state": public()})
         DETECTOR = AutoDetect(emit, CFG.get("game_exe", "WardogsClient-Win64-Shipping.exe"),
                               CFG.get("detect_fps", 4), cfg=CFG)
         if GAME_PROFILE:
             DETECTOR.use_profile(GAME_PROFILE)
+        DETECTOR.on_frame = lambda dbg, ts: STATUS.on_frame_text(dbg.get("respawn_text"), dbg.get("side_text"), ts)
         DETECTOR.start()
     if CFG.get("game_boost", True) and sys.platform == "win32":
         try:

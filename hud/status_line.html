@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Protocol HUD - Game Status Line</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<style>
+/* Game status line. Code-only (no AI): fed by the HUD's own kill/death/downed detection.
+   URL options: ?scale=1.2  ?align=left|center|right  ?idle=0 (hide the idle line)  ?demo=<state>|cycle */
+:root{--c:#9aa4ad;--ink:#eef1f3;--scale:1}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}
+body{display:flex;align-items:center;justify-content:var(--justify,center);font-family:"Barlow Condensed","Arial Narrow",system-ui,sans-serif}
+#line{display:inline-flex;align-items:center;gap:calc(12px*var(--scale));padding:calc(9px*var(--scale)) calc(18px*var(--scale)) calc(9px*var(--scale)) calc(14px*var(--scale));
+  background:rgba(22,24,25,.90);border:1px solid rgba(214,220,226,.26);border-left:calc(4px*var(--scale)) solid var(--c);border-radius:2px;
+  box-shadow:0 4px 18px rgba(0,0,0,.45);transition:opacity .25s ease,transform .25s ease,border-color .25s ease;white-space:nowrap}
+#line.swap{opacity:0;transform:translateY(calc(6px*var(--scale)))}
+#line.hidden{opacity:0}
+#dot{width:calc(9px*var(--scale));height:calc(9px*var(--scale));border-radius:50%;background:var(--c);box-shadow:0 0 calc(10px*var(--scale)) var(--c);flex:none}
+#txt{color:var(--ink);font-weight:700;font-size:calc(34px*var(--scale));letter-spacing:.09em;line-height:1;text-transform:uppercase;
+  text-shadow:0 2px 0 rgba(0,0,0,.6)}
+.idle #dot{background:#e5463a;box-shadow:0 0 calc(10px*var(--scale)) #e5463a;animation:blink 2s ease-in-out infinite}
+.idle #txt{color:#d6dce1;font-weight:600}
+@keyframes blink{50%{opacity:.35}}
+.urgent #dot{animation:blink .9s ease-in-out infinite}
+</style>
+</head>
+<body>
+<div id="line" class="idle"><span id="dot"></span><span id="txt">WARDOGS S3 - LIVE WITH THE SQUAD</span></div>
+<script>
+(() => {
+  const Q = new URLSearchParams(location.search);
+  const COLORS = {idle:"#9aa4ad", flying:"#5fa8ff", riding:"#5fa8ff", deploying:"#62c04e", back:"#62c04e", revived:"#62c04e",
+                  downed:"#e5533d", kia:"#93a7b8", streak:"#e8a33d", victory:"#d8c27a"};
+  const URGENT = new Set(["downed"]);
+  const CYCLE = ["idle","flying","riding","deploying","downed","kia","back","streak3","streak5","revived","victory"];
+  const scale = parseFloat(Q.get("scale") || "1") || 1;
+  document.documentElement.style.setProperty("--scale", scale);
+  const align = Q.get("align");
+  if (align) document.body.style.setProperty("--justify", align === "left" ? "flex-start" : align === "right" ? "flex-end" : "center");
+  const hideIdle = Q.get("idle") === "0";
+  const line = document.getElementById("line"), txt = document.getElementById("txt");
+  let shown = null;
+  function show(s) {
+    const key = s.state + "|" + s.text;
+    if (key === shown) return;
+    const first = shown === null;
+    shown = key;
+    const apply = () => {
+      txt.textContent = s.text;
+      line.style.setProperty("--c", COLORS[s.state] || COLORS.idle);
+      line.className = (s.state === "idle" ? "idle" : "") + (URGENT.has(s.state) ? " urgent" : "") +
+                       (hideIdle && s.state === "idle" ? " hidden" : "");
+    };
+    if (first) { apply(); return; }
+    line.classList.add("swap");
+    setTimeout(apply, 180);
+  }
+  let demo = Q.get("demo"), ci = 0;
+  async function tick() {
+    try {
+      let d = demo;
+      if (demo === "cycle") d = CYCLE[(ci++) % CYCLE.length];
+      const r = await fetch(d ? "/status?demo=" + encodeURIComponent(d) : "/status", {cache: "no-store"});
+      if (r.ok) show(await r.json());
+    } catch (e) { /* server restarting: keep the last line */ }
+  }
+  tick();
+  setInterval(tick, demo === "cycle" ? 2500 : 500);
+})();
+</script>
+</body>
+</html>

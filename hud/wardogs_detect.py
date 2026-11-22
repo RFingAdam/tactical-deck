@@ -160,6 +160,11 @@ def count_confirm(frame):
     return best, seen
 
 
+# Lower-right hint-region text read by downed_cues() this frame. The game status line reuses it (pilot / seat key
+# hints), so it costs no extra OCR. Detector.feed() clears it before each frame; only the detector thread uses it.
+SIDE_TEXT = []
+
+
 def downed_cues(frame):
     """True if the downed UI is up: the GIVE UP prompt OR the VIEW DAMAGE LOG panel."""
     down, text = is_downed(frame)
@@ -168,6 +173,7 @@ def downed_cues(frame):
     c = region(frame, "damagelog")
     for fn in (v_gray, v_inv):
         t = " ".join(ocr_lines(fn(c)))
+        SIDE_TEXT.append(t)
         if RE_DAMAGELOG.search(t):
             return True, t
     return False, ""
@@ -389,7 +395,9 @@ class Detector:
             else:
                 self.win_hits = 0
         # ---- downed (info) ----
+        SIDE_TEXT.clear()
         down, dtext = downed_cues(frame)
+        side = list(SIDE_TEXT)
         if down:
             self.downed_hits += 1
             self.last_downed_ts = ts
@@ -407,6 +415,7 @@ class Detector:
                 if self.occluded:
                     self.last_downed_ts = ts
         # ---- death: respawn countdown (checked every 0.5 s) ----
+        rtext = None
         if ts - self.last_respawn_check >= 0.5:
             self.last_respawn_check = ts
             rtext = " ".join(ocr_lines(v_gray(region(frame, "respawn"))))
@@ -453,4 +462,6 @@ class Detector:
             if ts - self.down_started_ts <= self.MAX_DOWN_S:
                 events.append("revived")
         return events, {"confirm": n, "confirm_lines": seen, "downed": dtext, "death_text": self.death_text,
-                        "occluded": self.occluded if self.downed_active else False}
+                        "occluded": self.occluded if self.downed_active else False,
+                        # status line: text already read this frame, None = not read this frame
+                        "respawn_text": rtext, "side_text": " | ".join(side) if side else None}
