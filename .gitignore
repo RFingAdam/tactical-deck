@@ -22,6 +22,7 @@ config.demo.json
 *.log
 director/duck_state.json
 hud/state.json
+hud/status.txt
 *.bak
 *.pre-*.bak
 
